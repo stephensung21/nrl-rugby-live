@@ -32,13 +32,22 @@ export function passBall(m, p, q, o = {}) {
   if (!q || b.carrier !== p) return false;
   const T = p.team, f = p.fwd;
   const sx = p.p.x + f.x * 0.15, sy = 1.1, sz = p.p.z + f.z * 0.15;
-  let speed = o.offload ? 9.5 : 12.5 + p.attr.pass * 0.07 + (o.long ? 3 : 0);
+  // standard pass: a touch deeper and softer, sticks nearly every time; flat pass: harder and in front of the
+  // runner so he hits it at pace, but easier to read and intercept
+  let speed = o.offload ? 9.5 : 12.5 + p.attr.pass * 0.07 + (o.long ? 3 : 0) + (o.flat ? 2.5 : -0.5);
   let t = Math.hypot(q.p.x - sx, q.p.z - sz) / speed, tx = q.p.x, tz = q.p.z;
   for (let i = 0; i < 4; i++) {
     tx = q.p.x + q.v.x * t * 0.92; tz = q.p.z + q.v.z * t * 0.92;
     t = Math.hypot(tx - sx, tz - sz) / speed;
   }
   t = clamp(t, 0.12, 1.7);
+  const d = T.dir, qs = Math.hypot(q.v.x, q.v.z);
+  if (o.flat && !o.offload) {
+    // lead the runner, but never forward relative to the passer's own momentum
+    if (qs > 1) { tx += (q.v.x / qs) * 1.0; tz += (q.v.z / qs) * 1.0; }
+    const fwdRel = (tx - sx - p.v.x * t) * d;
+    if (fwdRel > 0.5) tx -= (fwdRel - 0.5) * d;
+  } else if (!o.offload) tx -= d * 1.2;
   const dist = Math.hypot(tx - sx, tz - sz);
   let sigma = (1 - p.attr.pass / 100) * 0.07 + dist * 0.0018 + (o.offload ? 0.07 : 0) + (p.state === 'tackled' ? 0.04 : 0) + (o.long ? 0.015 : 0);
   if (!T.human) sigma *= m.diff.cpuPassErr; else sigma *= 0.8;
@@ -46,7 +55,7 @@ export function passBall(m, p, q, o = {}) {
   const latE = gauss() * sigma * dist, lonE = gauss() * sigma * dist * 0.5;
   tx += -uz * latE + ux * lonE; tz += ux * latE + uz * lonE;
   const ty = 1.15 + gauss() * sigma * 2.5;
-  b.release('pass', { team: T, passer: p, target: q, rx: sx, rz: sz, pvx: p.v.x, t: m.time, offload: !!o.offload, tx, tz });
+  b.release('pass', { team: T, passer: p, target: q, rx: sx, rz: sz, pvx: p.v.x, t: m.time, offload: !!o.offload, flat: !!o.flat, tx, tz });
   b.p.set(sx, sy, sz);
   b.v.set((tx - sx) / t, (ty - sy) / t + 0.5 * GRAVITY * t, (tz - sz) / t);
   b.drag = 0; b.curve = 0; b.spin = 'spiral'; b.grubber = false;
@@ -57,7 +66,7 @@ export function passBall(m, p, q, o = {}) {
   q.ai.passCd = (q.isForward || q.num === 2 || q.num === 5 ? 0.7 : 0.45) + rand() * 0.4; q.ai.dummyHalf = false; q.ai.plan = null;
   m.kickTarget = { x: tx, z: tz, t: m.time + t, pass: true };
   m.audio.catchBall();
-  m.emit('pass', { team: T, player: p, to: q, offload: !!o.offload });
+  m.emit('pass', { team: T, player: p, to: q, offload: !!o.offload, kind: o.flat ? 'flat' : 'standard' });
   if (o.offload) T.stats.offloads++;
   return true;
 }
@@ -78,8 +87,9 @@ export function offload(m, c, side) {
     bd = dd; q = t;
   }
   if (!q) return false;
+  if (e.noOffload) { m.message('ARMS PINNED', 'No offload from a ball-and-all tackle', 1.0, 'warn'); return true; }
   const n = e.tacklers.length;
-  const p = 0.26 + c.attr.hand / 260 + (1 - e.progress) * 0.32 - (n - 1) * 0.24 - Math.max(0, e.dom) * 0.25;
+  const p = (e.kind === 'low' ? 0.12 : 0) + 0.26 + c.attr.hand / 260 + (1 - e.progress) * 0.32 - (n - 1) * 0.24 - Math.max(0, e.dom) * 0.25;
   if (chance(clamp(p, 0.04, 0.85))) { passBall(m, c, q, { offload: true }); m.message('OFFLOAD!', `${c.name} gets the arm free`, 1.2, 'good'); }
   else spillBall(m, c, 'offload');
   return true;
@@ -265,7 +275,7 @@ function catchChance(m, p, contested) {
   const sp = Math.hypot(b.v.x, b.v.y, b.v.z);
   if (b.kind === 'pass' && info) {
     if (info.team === p.team) c = info.target === p ? 0.975 : 0.88;
-    else c = (p.controlled ? 0.34 : 0.15) + (p.attr.hand - 70) / 300;
+    else c = (p.controlled ? 0.34 : 0.15) + (info.flat ? 0.12 : 0) + (p.attr.hand - 70) / 300;
     if (info.offload) c -= 0.08;
   } else if (b.kind === 'kick' && info) {
     if (b.state === 'ground' || b.p.y < 0.45) c = 0.86;
@@ -274,7 +284,7 @@ function catchChance(m, p, contested) {
   } else c = b.p.y < 0.45 ? 0.82 : 0.74;
   c += (p.attr.hand - 75) / (b.kind === 'pass' ? 300 : 160);
   if (b.kind !== 'pass') c -= Math.max(0, sp - 16) * 0.02;
-  if (contested) c -= 0.22;
+  if (contested) c -= p.jumpT > 0 ? 0.08 : 0.22;
   if (b.grubber) c -= 0.1;
   if (p.team.human) c += m.diff.humanCatch;
   return clamp(c, 0.04, 0.99);
@@ -283,7 +293,7 @@ function catchChance(m, p, contested) {
 export function tryGather(m) {
   const b = m.ball, now = m.time;
   const by = b.p.y;
-  if (by > 3.0) return;
+  if (by > 3.2) return;
   const cands = [];
   for (const p of m.players) {
     if (!p.isUpright() || p.state === 'kick' || p.state === 'celebrate') continue;
@@ -291,11 +301,13 @@ export function tryGather(m) {
     if (p.kickOffside && !p.controlled) continue;
     const f = p.fwd;
     const hd = dist2D(p.p.x + f.x * 0.25, p.p.z + f.z * 0.25, b.p.x, b.p.z);
-    const reach = by < 0.5 ? 0.9 : 1.05;
-    const maxH = 2.35 + (p.attr.hand > 80 ? 0.1 : 0);
+    const reach = (by < 0.5 ? 0.9 : 1.05) + (p.jumpT > 0 ? 0.2 : 0);
+    const maxH = 2.35 + (p.attr.hand > 80 ? 0.1 : 0) + (p.jumpT > 0 ? 0.75 : 0);
+    // AI players leap for a high ball they can reach
+    if (!p.controlled && b.kind !== 'pass' && b.v.y < 0 && by > 2.1 && by < 3.0 && hd < 1.4 && p.jumpT === 0) p.doJump();
     if (hd > reach || by > maxH) continue;
-    // AI defenders only go for passes that come right at them
-    if (b.kind === 'pass' && b.info && b.info.team !== p.team && hd > 0.75) continue;
+    // AI defenders only go for passes that come right at them (flat passes are easier to read)
+    if (b.kind === 'pass' && b.info && b.info.team !== p.team && hd > (b.info.flat ? 1.0 : 0.75)) continue;
     if (b.kind === 'pass' && b.info && b.info.team === p.team && b.info.target !== p && hd > 0.6) continue;
     cands.push({ p, hd });
   }
@@ -374,7 +386,7 @@ export function carrierBounds(m, c) {
   if (ax > H) {
     const nd = nearestDist(m, T.opp, c);
     let ground;
-    if (c.controlled) ground = m.input.pressed('step') || nd < 1.8 || ax > H + 6.5 || az > W - 0.8;
+    if (c.controlled) ground = m.input.pressed('faceA') || nd < 1.8 || ax > H + 6.5 || az > W - 0.8;
     else ground = nd < 3.8 || Math.abs(c.p.z) < 5 || ax > H + 5 || az > W - 1;
     if (ground) { c.setState('free'); m.scoreTry(c, c.p.z); }
     return;
@@ -382,7 +394,7 @@ export function carrierBounds(m, c) {
   if (ax < -H) {
     if (ax < -FIELD.dead || az > W) return m.whistleStop('DEAD IN-GOAL', `Goal-line drop-out ${T.short}`, { type: 'dropout', team: T });
     const nd = nearestDist(m, T.opp, c);
-    const ground = c.controlled ? m.input.pressed('step') : (c.ai.inGoalCatch && nd < 10);
+    const ground = c.controlled ? m.input.pressed('faceA') : (c.ai.inGoalCatch && nd < 10);
     if (ground) {
       if (c.ai.inGoalCatch) return m.whistleStop('TOUCHED DOWN', `20m restart ${T.short}`, { type: 'ptb', team: T, x: -T.dir * 30, z: 0 }, { style: 'good' });
       return m.whistleStop('TOUCHED DOWN', `Goal-line drop-out ${T.short}`, { type: 'dropout', team: T });
@@ -475,28 +487,27 @@ export function humanGoalKick(m, dt, pd) {
     const old = pd.dist;
     pd.dist = clamp(pd.dist - inp.move.y * 9 * dt, 8, 40);
     if (pd.dist !== old) { pd.x = T.dir * (H - pd.dist); pd.baseYaw = pd.yaw = headingOf(gx - pd.x, -pd.z); }
-    if (inp.pressed('kick') || inp.pressed('step') || inp.pressed('confirm')) { pd.stage = 'aim'; m.audio.ui(); }
+    if (inp.pressed('faceA') || inp.pressed('confirm')) { pd.stage = 'aim'; m.audio.ui(); }
   } else if (pd.stage === 'aim') {
     pd.yaw = clamp(pd.yaw - inp.move.x * 0.45 * dt, pd.baseYaw - 0.6, pd.baseYaw + 0.6);
     pd.elev = clamp(pd.elev + inp.move.y * 0.45 * dt, 0.3, 0.95);
-    if (inp.pressed('kick') || inp.pressed('step')) { pd.stage = 'power'; pd.holdT = 0; pd.powerBtn = inp.pressed('kick') ? 'kick' : 'step'; }
+    if (inp.pressed('faceA')) { pd.stage = 'power'; pd.holdT = 0; pd.powerBtn = 'faceA'; }
   } else if (pd.stage === 'power') {
     pd.holdT += dt; pd.power = pingPong(pd.holdT, 1.15);
     if (inp.released(pd.powerBtn) || !inp.held(pd.powerBtn)) { pd.stage = 'run'; pd.runT = 0; }
   }
 }
+// Kick-offs, drop-outs and kicking for touch: A/D aim, hold K (A) for the main kick; on a kick-off hold L (B)
+// instead for a short, onside kick-off.
 export function humanSetPieceAim(m, dt, pd, types) {
   const inp = m.input;
   if (!pd.baseYaw) pd.baseYaw = pd.yaw;
   if (pd.foot === undefined) pd.foot = m.humanFoot || pd.kicker.attr.foot;
   if (inp.pressed('foot')) pd.foot = pd.foot === 'R' ? 'L' : 'R';
-  if (types.length > 1 && (inp.pressed('kickNext') || inp.pressed('kickPrev') || inp.pressed('k1') || inp.pressed('k2'))) {
-    pd.type = inp.pressed('k1') ? types[0] : inp.pressed('k2') ? types[1] : types[(types.indexOf(pd.type) + 1) % types.length];
-    m.audio.ui();
-  }
   if (!pd.powering) {
     pd.yaw = clamp(pd.yaw - inp.move.x * 0.7 * dt, pd.baseYaw - 1.1, pd.baseYaw + 1.1);
-    if (inp.pressed('kick') || inp.pressed('step')) { pd.powering = true; pd.holdT = 0; pd.powerBtn = inp.pressed('kick') ? 'kick' : 'step'; }
+    const btn = inp.pressed('faceA') ? 'faceA' : (types.length > 1 && inp.pressed('faceB')) ? 'faceB' : null;
+    if (btn) { pd.powering = true; pd.holdT = 0; pd.powerBtn = btn; pd.type = btn === 'faceB' ? types[1] : types[0]; m.audio.ui(); }
   } else {
     pd.holdT += dt; pd.power = pingPong(pd.holdT, 1.15);
     pd.yaw = clamp(pd.yaw - inp.move.x * 0.35 * dt, pd.baseYaw - 1.1, pd.baseYaw + 1.1);
@@ -563,6 +574,26 @@ export function cpuOpenPlayKick(m, c) {
   }
   aimKickAt(m, c, type, tx, tz);
 }
+// Quick kick: no aiming, it goes where the kicker is heading. Distance is judged for him.
+export function quickKick(m, p, type, foot) {
+  const T = p.team, d = T.dir, ax = p.p.x * d;
+  if (type === 'fieldgoal') {
+    // straight at the posts with a sensible power, but no allowance for the wind: that's on you
+    const sol = solveGoal({ wind: { x: 0, z: 0 } }, p.p.x, p.p.z, d * H, KICKS.fieldgoal, foot, KICKS.fieldgoal.elev);
+    return kickBall(m, p, type, sol.yaw, sol.power, { foot });
+  }
+  const base = headingOf(d, 0);
+  let yaw = p.speedH > 1.5 ? Math.atan2(p.v.x, p.v.z) : p.heading;
+  yaw = base + clamp(((yaw - base + Math.PI * 3) % (Math.PI * 2)) - Math.PI, -1.2, 1.2);
+  const toLine = H - ax;
+  let dist;
+  if (type === 'grubber') dist = clamp(toLine + 5, 8, 26);
+  else if (type === 'chip') dist = clamp(toLine < 18 ? toLine + 3 : 11, 7, 18);
+  else dist = clamp(toLine > 55 ? 50 : toLine - 4, 25, 55);
+  const power = type === 'grubber' ? clamp((dist - 4) / 26, 0.1, 1) : powerForRange(KICKS[type], type, dist);
+  kickBall(m, p, type, yaw, power, { foot });
+}
+
 export function aimKickAt(m, c, type, tx, tz) {
   const def = KICKS[type];
   let yaw = headingOf(tx - c.p.x, tz - c.p.z);
@@ -629,8 +660,6 @@ export function syncAimVisuals(m) {
     if (type === 'fieldgoal') showRet = false;
   } else if ((m.phase === 'kickoff' || m.phase === 'touchKick') && m.pd.team?.human && m.pd.stage === 'aim') {
     const b = m.ball; start = { x: b.p.x, y: 0.3, z: b.p.z }; yaw = m.pd.yaw; type = m.pd.type; power = m.pd.powering ? m.pd.power : 0.75;
-  } else if (m.phase === 'goalKick' && m.pd.team?.human && (m.pd.stage === 'aim' || m.pd.stage === 'power' || m.pd.stage === 'place')) {
-    const b = m.ball; start = { x: b.p.x, y: 0.3, z: b.p.z }; yaw = m.pd.yaw; type = 'goal'; elev = m.pd.elev; power = m.pd.stage === 'power' ? Math.max(0.35, m.pd.power) : 0.7; showRet = false;
   }
   if (!start) return;
   const def = KICKS[type]; const el = elev ?? def.elev;

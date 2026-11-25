@@ -45,23 +45,25 @@ while (Date.now() - t0 < LIMIT) {
   if (s.over) { if (shots) await page.screenshot({ path: `${shots}/fulltime.png` }); break; }
   if (s.modal) { if (shots && shotN < 12) await page.screenshot({ path: `${shots}/modal-${shotN++}.png` }); await tap('Digit1'); await tap('Enter'); await page.waitForTimeout(300); continue; }
   if ((s.phase === 'kickoff' || s.phase === 'touchKick') && s.humanKicks && s.stage === 'aim') {
-    await tap('KeyD', 150); await page.keyboard.down('KeyG'); await page.waitForTimeout(450); await page.keyboard.up('KeyG'); continue;
+    await tap('KeyD', 150); const kk = Math.random() < 0.2 ? 'KeyL' : 'KeyK'; await page.keyboard.down(kk); await page.waitForTimeout(450); await page.keyboard.up(kk); continue;
   }
   if (s.phase === 'goalKick' && s.humanKicks) {
-    if (s.stage === 'place') { await tap('KeyS', 200); if (shots && shotN < 12) await page.screenshot({ path: `${shots}/goal-${shotN++}.png` }); await tap('Space'); }
-    else if (s.stage === 'aim') { await tap('KeyV'); await tap('KeyW', 100); await page.keyboard.down('Space'); await page.waitForTimeout(380); if (shots && shotN < 12) await page.screenshot({ path: `${shots}/power-${shotN++}.png` }); await page.keyboard.up('Space'); }
+    if (s.stage === 'place') { await tap('KeyS', 200); if (shots && shotN < 12) await page.screenshot({ path: `${shots}/goal-${shotN++}.png` }); await tap('KeyK'); }
+    else if (s.stage === 'aim') { await tap('KeyV'); await tap('KeyW', 100); await page.keyboard.down('KeyK'); await page.waitForTimeout(380); if (shots && shotN < 12) await page.screenshot({ path: `${shots}/power-${shotN++}.png` }); await page.keyboard.up('KeyK'); }
     await page.waitForTimeout(200); continue;
   }
   if (s.phase === 'play' && s.carrierIsMe) {
     await page.keyboard.down('KeyW'); await page.keyboard.down('ShiftLeft');
     const r = Math.random();
-    if (r < 0.25) await tap(Math.random() < 0.5 ? 'KeyQ' : 'KeyE');
-    else if (r < 0.32) await tap('KeyE', 350);
-    else if (r < 0.45) await tap('Space');
-    else if (r < 0.55) await tap('KeyF');
-    else if (r < 0.62) await tap('KeyR');
-    else if (r < 0.66) await tap('KeyX');
-    else if (r < 0.74) { await tap('Digit' + (1 + Math.floor(Math.random() * 4))); await page.keyboard.down('KeyG'); await tap('KeyA', 200); if (shots && shotN < 12) await page.screenshot({ path: `${shots}/kickaim-${shotN++}.png` }); await page.waitForTimeout(300); await page.keyboard.up('KeyG'); }
+    const bump = Math.random() < 0.5 ? 'KeyQ' : 'KeyE';
+    if (r < 0.18) { await tap(bump); if (Math.random() < 0.4) { await page.waitForTimeout(40); await tap(bump); } }       // pass / flat pass
+    else if (r < 0.3) { await page.keyboard.down(bump); await tap(['KeyK', 'KeyL', 'KeyI'][Math.floor(Math.random() * 3)]); if (shots && shotN < 12) await page.screenshot({ path: `${shots}/passpick-${shotN++}.png` }); await page.keyboard.up(bump); }
+    else if (r < 0.42) await tap(Math.random() < 0.5 ? 'ArrowLeft' : 'ArrowRight');
+    else if (r < 0.5) await tap('ArrowDown', 300);
+    else if (r < 0.56) await tap('ArrowUp');
+    else if (r < 0.6) await tap('KeyI');
+    else if (r < 0.64) await tap(['KeyK', 'KeyL', 'KeyJ', 'KeyU'][Math.floor(Math.random() * 4)]);
+    else if (r < 0.72) { const f = ['KeyK', 'KeyL', 'KeyJ', 'KeyI', 'KeyU'][Math.floor(Math.random() * 5)]; await page.keyboard.down('Space'); await page.keyboard.down(f); await tap('KeyA', 200); if (shots && shotN < 12) await page.screenshot({ path: `${shots}/kickaim-${shotN++}.png` }); await page.keyboard.up('Space'); await page.waitForTimeout(300); await page.keyboard.up(f); }
     else await page.waitForTimeout(250);
     await page.keyboard.up('ShiftLeft');
     continue;
@@ -69,7 +71,7 @@ while (Date.now() - t0 < LIMIT) {
   if (s.phase === 'play' && s.attacking === false) {
     await page.keyboard.down('KeyW');
     const r = Math.random();
-    if (r < 0.4) await tap('Space'); else if (r < 0.5) await tap('KeyF'); else if (r < 0.6) await tap('KeyR'); else if (r < 0.7) await tap('KeyQ'); else if (r < 0.75) await tap('KeyE');
+    if (r < 0.35) await tap('KeyK'); else if (r < 0.45) await tap('KeyL', 900); else if (r < 0.55) await tap('KeyI'); else if (r < 0.62) { await tap('KeyK'); await page.waitForTimeout(150); await tap('KeyJ'); } else if (r < 0.7) await tap('KeyQ'); else if (r < 0.75) await tap('KeyE');
     await page.waitForTimeout(120);
     await page.keyboard.up('KeyW');
     continue;

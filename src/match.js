@@ -67,7 +67,7 @@ export class Match {
     this.poss = this.teams[0]; this.tackleCount = 0;
     this.engagements = [];
     this.controlled = null;
-    this.kickAim = null; this.selectedKick = 0; this.humanFoot = null;
+    this.kickAim = null; this.humanFoot = null;
     this.kickTarget = null; this.events = []; this.eventLog = [];
     this.gainLineX = 0; this.lineBreakDone = false; this.excite = 0;
     this.firstKickTeam = chance(0.5) ? this.teams[0] : this.teams[1];
@@ -559,6 +559,7 @@ export class Match {
     if (pd.stage === 'place' || pd.stage === 'aim' || pd.stage === 'power') {
       const sx = pd.x, zz = pd.z;
       this.ball.p.set(sx, 0.3, zz); this.tee.position.set(sx, 0.06, zz); this.tee.visible = true;
+      this.ball.lookDir.set(Math.sin(pd.yaw), 0.25 + pd.elev * 0.4, Math.cos(pd.yaw)).normalize(); this.ball.spinAngle = 0;
       k.setState('goalkick'); k.anim.preKick = true; k.heading = pd.yaw;
       k.p.set(sx - Math.sin(pd.yaw) * 3.5, 0, zz - Math.cos(pd.yaw) * 3.5);
       if (T.human) A.humanGoalKick(this, dt, pd);

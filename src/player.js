@@ -22,6 +22,7 @@ export class Player {
     this.passAnim = 0; this.passSide = 1; this.catchAnim = 0; this.catchHigh = false; this.refSignal = 0;
     this.hasBall = false; this.carrySide = 1;
     this.lateralLean = 0; this.accelLean = 0; this.readyStance = false; this.legDriveVis = 0; this.jumpY = 0;
+    this.jumpT = 0; this.fendHold = 0;
     this.speedH = 0;
     this.ai = { role: 'none', react: 0, bite: 0, biteX: 0, biteZ: 0, evadeChecked: null, think: Math.random() * 0.2 };
     this.engage = null; // tackle engagement reference
@@ -54,6 +55,8 @@ export class Player {
     if (this.refSignal > 0) this.refSignal -= dt;
     this.speedMul = damp(this.speedMul, 1, 1.2, dt);
     if (this.ai.bite > 0) this.ai.bite -= dt;
+    if (this.jumpT > 0) { this.jumpT = Math.max(0, this.jumpT - dt); this.jumpY = Math.sin((1 - this.jumpT / 0.6) * Math.PI) * 0.55; }
+    else this.jumpY = 0;
 
     // timed state transitions
     const s = this.state;
@@ -132,7 +135,7 @@ export class Player {
   }
   doFend(threatSide) {
     if (this.cd.fend > 0 || !(this.state === 'free' || this.state === 'step')) return false;
-    this.setState('fend', 0.5);
+    this.setState('fend', 0.5); this.fendHold = 0;
     // carry the ball away from the threat and fend with the near arm
     if (threatSide) this.carrySide = -threatSide;
     this.cd.fend = 0.95; this.stamina = Math.max(0, this.stamina - 0.03);
@@ -144,8 +147,15 @@ export class Player {
     this.cd.bump = 1.0; this.stamina = Math.max(0, this.stamina - 0.04);
     return true;
   }
+  doJump() {
+    if (this.jumpT > 0 || !(this.state === 'free' || this.state === 'stumble')) return false;
+    this.jumpT = 0.6; this.catchAnim = 0.6; this.catchHigh = true; this.stamina = Math.max(0, this.stamina - 0.02);
+    return true;
+  }
+  // holding the fend keeps the arm out (and makes it stronger) for up to ~0.9 s
+  holdFend() { if (this.state === 'fend' && this.stateT < 0.9) { this.stateDur = Math.max(this.stateDur, this.stateT + 0.08); this.fendHold = this.stateT; } }
   stepWindow() { return this.state === 'step' && this.stateT > 0.02 && this.stateT < 0.34; }
-  fendWindow() { return this.state === 'fend' && this.stateT < 0.42; }
+  fendWindow() { return this.state === 'fend' && (this.stateT < 0.42 || this.fendHold >= this.stateT - 0.05); }
   bumpWindow() { return this.state === 'bump' && this.stateT < 0.45; }
 
   faceHeading(h) { this.heading = h; }

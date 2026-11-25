@@ -30,11 +30,11 @@ const log = (...a) => console.log(...a);
 // 1. Kick-off by the human
 await page.evaluate(() => { const m = window.__game.match; m.setupKickoff(m.humanTeam); });
 let s = await waitPhase((s) => s.phase === 'kickoff' && s.stage === 'aim');
-await tap('Digit2'); await tap('Digit1'); await tap('KeyA', 200);
+await tap('KeyA', 200);
 if (shots) await page.screenshot({ path: `${shots}/1-kickoff-aim.png` });
-await page.keyboard.down('KeyG'); await page.waitForTimeout(700);
+await page.keyboard.down('KeyK'); await page.waitForTimeout(700);
 if (shots) await page.screenshot({ path: `${shots}/1-kickoff-power.png` });
-await page.keyboard.up('KeyG');
+await page.keyboard.up('KeyK');
 s = await waitPhase((s) => s.phase === 'play'); log('kick-off →', JSON.stringify(s));
 await page.waitForTimeout(1500);
 if (shots) await page.screenshot({ path: `${shots}/1-kickoff-flight.png` });
@@ -44,13 +44,13 @@ await page.evaluate(() => { const m = window.__game.match; m.setupGoalKick(m.hum
 s = await waitPhase((s) => s.phase === 'goalKick' && s.stage === 'place'); log('conversion stage', s.stage);
 await tap('KeyS', 600);
 if (shots) await page.screenshot({ path: `${shots}/2-conv-place.png` });
-await tap('Space');
+await tap('KeyK');
 s = await waitPhase((s) => s.stage === 'aim');
 await tap('KeyV'); await tap('KeyD', 150); await tap('KeyW', 150);
 if (shots) await page.screenshot({ path: `${shots}/2-conv-aim.png` });
-await page.keyboard.down('Space'); await page.waitForTimeout(800);
+await page.keyboard.down('KeyK'); await page.waitForTimeout(800);
 if (shots) await page.screenshot({ path: `${shots}/2-conv-power.png` });
-await page.keyboard.up('Space');
+await page.keyboard.up('KeyK');
 await page.waitForTimeout(1200);
 if (shots) await page.screenshot({ path: `${shots}/2-conv-flight.png` });
 s = await waitPhase((s) => s.stage === 'result'); log('conversion result', JSON.stringify(s));
@@ -64,12 +64,12 @@ for (const [choice, key] of [['goal', 'Digit1'], ['touch', 'Digit2'], ['tap', 'D
   await tap(key);
   if (choice === 'goal') {
     s = await waitPhase((s) => s.phase === 'goalKick' && s.stage === 'aim');
-    await page.keyboard.down('KeyG'); await page.waitForTimeout(650); await page.keyboard.up('KeyG');
+    await page.keyboard.down('KeyK'); await page.waitForTimeout(650); await page.keyboard.up('KeyK');
     s = await waitPhase((s) => s.stage === 'result'); log('penalty goal', JSON.stringify(s));
   } else if (choice === 'touch') {
     s = await waitPhase((s) => s.phase === 'touchKick' && s.stage === 'aim');
     if (shots) await page.screenshot({ path: `${shots}/4-touch-aim.png` });
-    await page.keyboard.down('Space'); await page.waitForTimeout(800); await page.keyboard.up('Space');
+    await page.keyboard.down('KeyK'); await page.waitForTimeout(800); await page.keyboard.up('KeyK');
     s = await waitPhase((s) => s.phase === 'ptb' || s.phase === 'scrum', 12000); log('kick for touch →', JSON.stringify(s));
   } else {
     s = await waitPhase((s) => s.phase === 'play', 8000); log('tap →', JSON.stringify(s));
@@ -78,8 +78,13 @@ for (const [choice, key] of [['goal', 'Digit1'], ['touch', 'Digit2'], ['tap', 'D
 // 4. goal-line drop-out kicked by the human
 await page.evaluate(() => { const m = window.__game.match; m.setPhase('play', {}); m.whistleStop('TEST', '', { type: 'dropout', team: m.humanTeam }); });
 s = await waitPhase((s) => s.phase === 'kickoff' && s.stage === 'aim');
-await page.keyboard.down('KeyG'); await page.waitForTimeout(900); await page.keyboard.up('KeyG');
+await page.keyboard.down('KeyK'); await page.waitForTimeout(900); await page.keyboard.up('KeyK');
 s = await waitPhase((s) => s.phase === 'play'); log('drop-out →', JSON.stringify(s));
+// 4b. short kick-off with L
+await page.evaluate(() => { const m = window.__game.match; m.setPhase('play', {}); m.setupKickoff(m.humanTeam); });
+s = await waitPhase((s) => s.phase === 'kickoff' && s.stage === 'aim');
+await page.keyboard.down('KeyL'); await page.waitForTimeout(500); await page.keyboard.up('KeyL');
+s = await waitPhase((s) => s.phase === 'play'); log('short kick-off →', JSON.stringify(s), await page.evaluate(() => window.__game.match.eventLog.filter((e) => e.type === 'kick').slice(-1)[0].kind));
 // 5. scrum
 await page.evaluate(() => { const m = window.__game.match; m.scrumRestart(m.humanTeam, 0, 10, 'KNOCK ON', 'test'); });
 s = await waitPhase((s) => s.phase === 'scrum');

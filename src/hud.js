@@ -2,8 +2,10 @@
 import * as THREE from 'three';
 import { FIELD, KICKS, OPEN_PLAY_KICKS, POSITION_NAMES } from './config.js';
 import { clamp } from './util.js';
-import { pickReceiver } from './actions.js';
+import { passCandidates } from './actions.js';
 
+const KEYNAME = { faceA: 'K', faceB: 'L', faceX: 'J', faceY: 'I', fieldGoal: 'U' };
+const PADNAME = { faceA: 'A', faceB: 'B', faceX: 'X', faceY: 'Y', fieldGoal: 'R3' };
 const el = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
 
 export class HUD {
@@ -19,7 +21,7 @@ export class HUD {
     this.meter = el('div', 'meter', this.root, '<div class="meter-label"></div><div class="meter-bar"><div class="meter-fill"></div><div class="meter-tick"></div></div>');
     this.hint = el('div', 'hint', this.root);
     this.mini = el('canvas', 'minimap', this.root); this.mini.width = 240; this.mini.height = 150;
-    this.tags = [el('div', 'ptag', this.root), el('div', 'ptag', this.root)];
+    this.tags = Array.from({ length: 6 }, () => el('div', 'ptag', this.root));
     this.offTag = el('div', 'ptag off', this.root, 'OFFSIDE');
     this.fade = el('div', 'fade', root);
     this.modal = el('div', 'modal hidden', root);
@@ -72,18 +74,18 @@ export class HUD {
     const pad = this.m?.input.usingPad;
     this.modal.className = 'modal';
     this.modal.innerHTML = `<div class="panel"><h2>PENALTY</h2><p>Your call, skipper</p>
-      <button data-c="goal"><b>${pad ? 'A' : '1'}</b> Kick for goal (2 pts)</button>
-      <button data-c="touch"><b>${pad ? 'B' : '2'}</b> Kick for touch (keep the ball)</button>
-      <button data-c="tap"><b>${pad ? 'X' : '3'}</b> Tap and go</button></div>`;
+      <button data-c="goal"><b>${pad ? 'A' : 'K'}</b> Kick for goal (2 pts)</button>
+      <button data-c="touch"><b>${pad ? 'B' : 'L'}</b> Kick for touch (keep the ball)</button>
+      <button data-c="tap"><b>${pad ? 'X' : 'J'}</b> Tap and go</button></div>`;
     const done = (c) => { this.modal.className = 'modal hidden'; this.modal.innerHTML = ''; this._pc = null; cb(c); };
     this.modal.querySelectorAll('button').forEach((b) => b.addEventListener('click', () => done(b.dataset.c)));
     this._pc = done;
   }
   pollModal(input) {
     if (!this._pc) return;
-    if (input.pressed('k1') || input.pressed('step')) this._pc('goal');
-    else if (input.pressed('k2') || input.pressed('fend')) this._pc('touch');
-    else if (input.pressed('k3') || input.pressed('bump')) this._pc('tap');
+    if (input.pressed('k1') || input.pressed('faceA')) this._pc('goal');
+    else if (input.pressed('k2') || input.pressed('faceB')) this._pc('touch');
+    else if (input.pressed('k3') || input.pressed('faceX')) this._pc('tap');
   }
 
   showBreak(m, title, onContinue, note = '') {
@@ -111,7 +113,7 @@ export class HUD {
   }
   pollBreak(input) {
     if (!this._brk || performance.now() - this._brk.t < 600) return;
-    if (input.pressed('confirm') || input.pressed('step') || input.pressed('kick')) this._brk.act(this._brk.cont ? 'go' : 'again');
+    if (input.pressed('confirm') || input.pressed('faceA')) this._brk.act(this._brk.cont ? 'go' : 'again');
   }
   closeModal() { this.modal.className = 'modal hidden'; this.modal.innerHTML = ''; this._brk = null; this._pc = null; }
 
@@ -143,10 +145,14 @@ export class HUD {
     const cr = m.camRig; const f = cr.fwd;
     const wAng = Math.atan2(m.wind.x * -f.z + m.wind.z * f.x, m.wind.x * f.x + m.wind.z * f.z); // relative to camera forward
     const kmh = Math.round(m.wind.speed * 3.6);
-    const sel = m.kickAim ? OPEN_PLAY_KICKS.indexOf(m.kickAim.type) : m.selectedKick;
+    const B = pad ? { A: 'A', B: 'B', X: 'X', Y: 'Y', U: 'R3', M: 'LT' } : { A: 'K', B: 'L', X: 'J', Y: 'I', U: 'U', M: 'Space' };
+    const cur = m.kickAim ? m.kickAim.type : null;
+    const kt = (key, type, label) => `<span class="${cur === type ? 'sel' : ''}"><b>${key}</b> ${label}</span>`;
+    const atk = m.humanTeam && m.ball.carrier && m.ball.carrier.team === m.humanTeam;
     this.kick.innerHTML = `<div class="wind"><div class="arrow" style="transform:rotate(${(wAng * 180) / Math.PI}deg)">➤</div><div><b>${kmh} km/h</b><small>WIND</small></div></div>
-      ${m.humanTeam ? `<div class="ktypes">${OPEN_PLAY_KICKS.map((k, i) => `<span class="${i === sel ? 'sel' : ''}">${pad ? '' : i + 1 + ' '}${KICKS[k].label}</span>`).join('')}</div>
-      <div class="foot">FOOT: <b>${foot === 'L' ? 'LEFT' : 'RIGHT'}</b> <small>(${pad ? 'D-pad ↑' : 'V'})</small></div>` : ''}`;
+      ${m.humanTeam && atk ? `<div class="krow"><small>QUICK</small><div class="ktypes">${kt(B.A, '-', 'Punt')}${kt(B.B, '-', 'Grubber')}${kt(B.X, '-', 'Chip')}${kt(B.U, '-', 'Field goal')}</div></div>
+      <div class="krow"><small>HOLD ${B.M} +</small><div class="ktypes">${kt(B.A, 'punt', 'Punt')}${kt(B.B, 'grubber', 'Grubber')}${kt(B.X, 'chip', 'Chip')}${kt(B.Y, 'bomb', 'Bomb')}${kt(B.U, 'fieldgoal', 'FG')}</div></div>` : ''}
+      ${m.humanTeam ? `<div class="foot">FOOT: <b>${foot === 'L' ? 'LEFT' : 'RIGHT'}</b> <small>(${pad ? 'D-pad ↑' : 'V'})</small></div>` : ''}`;
     // meter
     let meterOn = false, val = 0, label = '', tick = -1;
     if (m.kickAim) { meterOn = true; val = m.kickAim.power; label = KICKS[m.kickAim.type].label + (m.kickAim.over > 0 ? ' — OVERCOOKED!' : ''); }
@@ -170,25 +176,29 @@ export class HUD {
     const T = m.humanTeam; if (!T) return '';
     const pd = m.pd;
     if (m.phase === 'goalKick' && pd.team === T) {
-      if (pd.stage === 'place') return `${k('W/S', 'L-stick ↕')} move the ball back / forward (${pd.dist.toFixed(0)}m out) · ${k('Space', 'A')} set ball · ${k('V', 'D-pad ↑')} foot`;
-      if (pd.stage === 'aim') return `${k('A/D', 'L-stick ↔')} aim · ${k('W/S', 'L-stick ↕')} height · hold ${k('Space/G', 'A/Y')} for power · watch the wind!`;
-      if (pd.stage === 'power') return 'Release to kick — the meter swings back!';
+      if (pd.stage === 'place') return `${k('W/S', 'L-stick ↕')} move the ball back / forward (${pd.dist.toFixed(0)}m out) · ${k('K', 'A')} set the ball · ${k('V', 'D-pad ↑')} foot`;
+      if (pd.stage === 'aim') return `${k('A/D', 'L-stick ↔')} line up the seam · ${k('W/S', 'L-stick ↕')} trajectory · hold ${k('K', 'A')} for power · mind the wind`;
+      if (pd.stage === 'power') return 'Release before the red zone — the meter swings back!';
     }
     if ((m.phase === 'kickoff' || m.phase === 'touchKick') && pd.team === T && pd.stage === 'aim') {
-      return `${k('A/D', 'L-stick ↔')} aim · hold ${k('Space/G', 'A/Y')} for power${m.phase === 'kickoff' && pd.type !== 'dropout' ? ` · ${k('1/2', 'D-pad ↔')} long / short (${KICKS[pd.type].label})` : ''}`;
+      return `${k('A/D', 'L-stick ↔')} aim · hold ${k('K', 'A')} for power${m.phase === 'kickoff' && pd.type !== 'dropout' ? ` · hold ${k('L', 'B')} instead for a short kick-off` : ''}`;
     }
-    if (m.phase === 'ptb' && pd.team === T) return `Play-the-ball… ${k('Q/E', 'LB/RB')} pass from dummy half, or run it`;
+    if (m.phase === 'ptb' && pd.team === T) return `Play-the-ball… ${k('Q/E', 'LB/RB')} pass from dummy half (+ ${k('K/L/I', 'A/B/Y')} to pick the runner), or run it`;
     if (m.phase !== 'play') return '';
     const b = m.ball, c = m.controlled;
-    if (m.kickAim) return `${k('A/D', 'L-stick ↔')} aim · release ${k('G', 'Y')} to kick · ${k('1-5', 'D-pad ↔')} change kick · ${k('Q/E', 'LB/RB')} cancel`;
+    if (m.kickAim) return `${k('A/D', 'L-stick ↔')} aim · release ${k(KEYNAME[m.kickAim.btn], PADNAME[m.kickAim.btn])} to kick · ${k('Q/E', 'LB/RB')} cancel`;
     if (b.carrier && b.carrier === c) {
-      if (c.state === 'tackled') return `In the tackle: ${k('Q/E', 'LB/RB')} offload · ${k('F/R', 'B/X')} fight free · mash ${k('Shift', 'RT')} leg drive`;
-      if (c.p.x * T.dir > FIELD.half) return `${k('Space', 'A')} ground the ball — run toward the posts for an easier conversion!`;
-      if (c.p.x * T.dir < -FIELD.half) return `In your in-goal: ${k('Space', 'A')} touch down, or run it out`;
-      return `${k('Q/E', 'LB/RB')} pass (hold = cut-out) · ${k('Space', 'A')} step · ${k('F', 'B')} fend · ${k('R', 'X')} shoulder · hold ${k('G', 'Y')} kick · ${k('X', 'LT')} dummy`;
+      if (c.state === 'tackled') return `In the tackle: ${k('Q/E', 'LB/RB')} offload · ${k('Arrows', 'R-stick')} fight free · mash ${k('Shift', 'RT')} leg drive`;
+      if (c.p.x * T.dir > FIELD.half) return `${k('K', 'A')} ground the ball — run toward the posts for an easier conversion!`;
+      if (c.p.x * T.dir < -FIELD.half) return `In your in-goal: ${k('K', 'A')} touch down, or run it out`;
+      if (m.input.held('passL') || m.input.held('passR')) return `${k('K', 'A')} 1st man · ${k('L', 'B')} 2nd · ${k('I', 'Y')} 3rd (cut-out) · double-tap for a flat ball`;
+      return `${k('Q/E', 'LB/RB')} pass (double-tap = flat) · ${k('←/→', 'R-stick ↔')} step · ${k('↓', 'R-stick ↓')} fend (hold) · ${k('↑', 'R-stick ↑')} shoulder · ${k('I', 'Y')} dummy`;
     }
-    if (b.carrier && b.carrier.team !== T) return `${k('Space', 'A')} tackle · ${k('F', 'B')} big hit · ${k('R', 'X')} dive · ${k('Q/E', 'LB/RB')} switch player`;
-    return `Chase it down! ${k('Q/E', 'LB/RB')} switch player`;
+    if (b.carrier && b.carrier.team !== T) {
+      if (c && c.state === 'tackling') return `${k('J', 'X')} strip (one-on-one only) · keep ${k('L', 'B')} held to hold him down (risky)`;
+      return `${k('K', 'A')} low tackle · ${k('L', 'B')} arm-grip · ${k('I', 'Y')} dive · ${k('Q/E', 'LB/RB')} switch player`;
+    }
+    return `Chase it down! ${k('J', 'X')} jump for the high ball · ${k('Q/E', 'LB/RB')} switch player`;
   }
 
   drawMini(m) {
@@ -215,14 +225,18 @@ export class HUD {
     this.offTag.style.display = 'none';
     if (c && (c.offside || c.kickOffside) && m.phase === 'play') this.project(this.offTag, c, camera);
     if (!c || b.carrier !== c || m.phase !== 'play' || c.state === 'tackled' || m.kickAim) return hideAll();
-    const sides = [-1, 1];
-    sides.forEach((s, i) => {
-      const q = pickReceiver(m, c, s, false);
-      const t = this.tags[i];
-      if (!q) { t.style.display = 'none'; return; }
-      t.textContent = s < 0 ? (pad ? 'LB' : 'Q') : (pad ? 'RB' : 'E');
-      this.project(t, q, camera);
-    });
+    hideAll();
+    const held = m.input.held('passL') ? -1 : m.input.held('passR') ? 1 : 0;
+    const names = pad ? ['A', 'B', 'Y'] : ['K', 'L', 'I'];
+    let i = 0;
+    for (const s of held ? [held] : [-1, 1]) {
+      const list = passCandidates(m, c, s).slice(0, held ? 3 : 1);
+      list.forEach((cand, n) => {
+        const t = this.tags[i++];
+        t.textContent = held ? names[n] : s < 0 ? (pad ? 'LB' : 'Q') : (pad ? 'RB' : 'E');
+        this.project(t, cand.q, camera);
+      });
+    }
   }
   project(elm, p, camera) {
     this.v3.set(p.p.x, 2.35, p.p.z).project(camera);

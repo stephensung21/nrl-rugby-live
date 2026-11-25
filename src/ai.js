@@ -180,7 +180,7 @@ function aiCarrier(m, c, dt) {
   if (c.state === 'tackled') {
     const e = c.engage;
     const support = e && c.team.players.some((q) => q !== c && q.isUpright() && dist2D(q.p.x, q.p.z, c.p.x, c.p.z) < 5 && (c.p.x - q.p.x) * c.team.dir > -1);
-    if (e && support && e.tacklers.length === 1 && !e.offloadTried && e.progress < 0.45 && chance(dt * 0.35 * (c.attr.hand > 82 ? 1.6 : 1))) A.offload(m, c, 0);
+    if (e && support && !e.noOffload && e.tacklers.length === 1 && !e.offloadTried && e.progress < 0.45 && chance(dt * 0.35 * (c.attr.hand > 82 ? 1.6 : 1))) A.offload(m, c, 0);
     if (e && !e.breakTried && e.progress < 0.3 && c.isForward && chance(dt * 0.8)) tryBreak(m, c);
     return;
   }
@@ -350,7 +350,8 @@ function defendLive(m, D, c, isPass, dt) {
       const lead = dd < 3 ? clamp(dd / Math.max(5, p.topSpeed), 0, 0.35) : null;
       if (lead !== null) goTo(p, c.p.x + c.v.x * lead, c.p.z + c.v.z * lead, { sprint: true, arrive: 0.6, stop: 0 });
       else goTo(p, ic.x, ic.z, { sprint: true, arrive: 0.6, stop: 0 });
-      if (!isPass && m.ball.carrier === c && c.state !== 'tackled') {
+      const markerWait = p.ai.marker && m.time - (m.playStartT || 0) < 0.55; // markers stand square until the ball is out
+      if (!isPass && m.ball.carrier === c && c.state !== 'tackled' && !markerWait) {
         // judge reach against where the carrier will be, not where he is
         const n22 = dist2D(p.p.x, p.p.z, c.p.x + c.v.x * 0.22, c.p.z + c.v.z * 0.22);
         const n40 = dist2D(p.p.x, p.p.z, c.p.x + c.v.x * 0.4, c.p.z + c.v.z * 0.4);
@@ -359,7 +360,7 @@ function defendLive(m, D, c, isPass, dt) {
           if (p.ai.react > react) {
             p.ai.react = 0;
             const headOn = (c.fwd.x * (p.p.x - c.p.x) + c.fwd.z * (p.p.z - c.p.z)) / Math.max(0.1, dd) > 0.5;
-            attemptTackle(m, p, headOn && p.attr.strength > 80 && chance(0.15) ? 'hit' : 'normal');
+            attemptTackle(m, p, headOn && p.attr.strength > 80 && chance(0.15) ? 'grip' : chance(0.3) ? 'low' : 'normal');
           }
         } else if (dd < 3.4 && n40 < 3.2 && (p.p.x - c.p.x) * d < 0.5 && c.speedH > p.speedH * 0.9 && chance(dt * 3)) attemptTackle(m, p, 'dive');
         else p.ai.react = Math.max(0, p.ai.react - dt * 0.5);

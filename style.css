@@ -44,7 +44,11 @@ kbd { font: 700 11px/1 system-ui, sans-serif; background: #f4f4f4; color: #111; 
 .kickpanel .wind .arrow { font-size: 26px; color: #7fd8ff; width: 30px; text-align: center; transform-origin: 50% 50%; }
 .kickpanel .wind b { font-size: 15px; display: block; }
 .kickpanel .wind small { color: #b9c4d0; font: 600 10px system-ui; letter-spacing: 1px; }
-.kickpanel .ktypes { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 6px; max-width: 230px; }
+.kickpanel .krow { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.kickpanel .krow > small { font: 700 9px system-ui; color: #9fb0c3; letter-spacing: 1px; min-width: 44px; }
+.kickpanel .ktypes { display: flex; flex-wrap: wrap; gap: 3px; max-width: 250px; }
+.kickpanel .ktypes b { color: var(--gold); }
+.kickpanel .ktypes span.sel b { color: #111; }
 .kickpanel .ktypes span { font: 700 10px system-ui, sans-serif; padding: 2px 5px; border-radius: 3px; background: rgba(255,255,255,.1); color: #cfd6df; }
 .kickpanel .ktypes span.sel { background: var(--gold); color: #111; }
 .kickpanel .foot { margin-top: 6px; font: 700 11px system-ui, sans-serif; color: #cfd6df; }

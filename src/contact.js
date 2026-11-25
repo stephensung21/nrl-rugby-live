@@ -4,9 +4,11 @@ import { clamp, rand, randRange, chance, gauss, dist2D, headingOf, damp } from '
 import * as A from './actions.js';
 
 const H = FIELD.half, W = FIELD.halfW;
-const REACH = { normal: 2.0, hit: 1.8, dive: 3.4, auto: 1.0 };
-const LUNGE_T = { normal: 0.22, hit: 0.26, dive: 0.42, auto: 0.12 };
-const CONTACT_R = { normal: 0.85, hit: 0.8, dive: 1.0, auto: 0.95 };
+// low = round the legs (safe, but arms stay free to offload); grip = arm-grip "ball and all" (stops offloads,
+// can jar the ball loose, risks high tackles); dive = desperation; hit = AI shoulder-led hit; auto = ran into him.
+const REACH = { normal: 2.0, low: 1.9, grip: 1.8, hit: 1.8, dive: 3.4, auto: 1.0 };
+const LUNGE_T = { normal: 0.22, low: 0.22, grip: 0.24, hit: 0.26, dive: 0.42, auto: 0.12 };
+const CONTACT_R = { normal: 0.85, low: 0.85, grip: 0.8, hit: 0.8, dive: 1.0, auto: 0.95 };
 
 export function attemptTackle(m, d, kind, o = {}) {
   const b = m.ball, c = b.carrier;
@@ -91,6 +93,8 @@ export function resolveContact(m, d, c, kind) {
     const armSide = -c.carrySide; // fend arm is the free arm: +1 right
     let pF = 0.38 + (c.attr.strength - d.attr.strength) / 110 + (c.attr.strength - d.attr.tackle) / 220 + (kind === 'dive' ? 0.18 : 0) - (kind === 'hit' ? 0.12 : 0) - mod;
     pF += (armSide > 0 ? sideR > -0.2 : sideR < 0.2) ? 0.1 : -0.15;
+    if (c.fendHold > 0.2) pF += 0.1;                       // a held fend locks the arm out
+    pF += (c.stamina - d.stamina) * 0.12;
     if (chance(clamp(pF, 0.05, 0.92))) {
       d.v.x = tx * 3.5; d.v.z = tz * 3.5; c.speedMul *= 0.9;
       beaten(m, d, c, 'fend', 0.9); m.audio.thud(0.5); return;
@@ -108,9 +112,10 @@ export function resolveContact(m, d, c, kind) {
     forceDom = 0.55; // lost the collision: smashed
   }
   // --- standard tackle
-  const base = { normal: 0.9, hit: 0.72, dive: 0.78, auto: 0.8 }[kind];
+  const base = { normal: 0.9, low: 0.93, grip: 0.85, hit: 0.72, dive: 0.78, auto: 0.8 }[kind];
   let pW = base + (d.attr.tackle - 72) / 180 - (c.attr.agility - 70) / 450 - Math.max(0, cs - 6) * 0.018 + (front < -0.3 ? -0.06 : 0) + mod;
   pW -= Math.max(0, c.attr.strength - d.attr.strength) / 500;
+  pW -= (1 - d.stamina) * 0.16; pW += (1 - c.stamina) * 0.06;   // tired defences drop off tackles
   if (c.isForward && d.mass < 85 && c.mass > 100) pW -= 0.06;
   if (forceDom === null && !chance(clamp(pW, 0.1, 0.97))) {
     const down = c.attr.strength > d.attr.strength + randRange(-15, 25) ? 0.7 : 0;
@@ -119,14 +124,16 @@ export function resolveContact(m, d, c, kind) {
     m.audio.thud(0.6);
     return;
   }
-  let dom = forceDom ?? (d.attr.strength * 0.45 + d.attr.tackle * 0.45 + (kind === 'hit' ? 28 : 0) + closing * 3.5 - c.attr.strength * 0.75 - cs * 2.2) / 50;
+  let dom = forceDom ?? (d.attr.strength * 0.45 + d.attr.tackle * 0.45 + (kind === 'hit' ? 28 : kind === 'grip' ? 14 : kind === 'low' ? -8 : 0) + closing * 3.5 - c.attr.strength * 0.75 - cs * 2.2) / 50;
   dom = clamp(dom + gauss() * 0.15, -1, 1);
   const e = startEngagement(m, c, d, dom, kind);
-  if (kind === 'hit' && dom > 0.25) {
+  d.stamina = Math.max(0, d.stamina - 0.05); c.stamina = Math.max(0, c.stamina - 0.04);
+  if (kind === 'grip') { e.noOffload = true; e.gripBy = d; }
+  if ((kind === 'hit' || kind === 'grip') && dom > 0.25) {
     m.emit('bighit', { team: d.team, player: d }); m.camRig.shake(0.35);
-    if (chance(0.1 + dom * 0.15 - (c.attr.hand - 70) / 400)) { endEngagement(m, e, false); A.spillBall(m, c, 'hit'); return; }
-    if (d.controlled && chance(0.05)) e.penalty = 'High tackle';
+    if (chance((kind === 'grip' ? 0.07 : 0.1) + dom * 0.14 - (c.attr.hand - 70) / 400)) { endEngagement(m, e, false); A.spillBall(m, c, 'hit'); return; }
   }
+  if ((kind === 'grip' || kind === 'hit') && chance(d.controlled ? 0.06 : 0.015)) e.penalty = 'High tackle';
 }
 
 export function startEngagement(m, c, d, dom, kind) {
@@ -152,6 +159,29 @@ function joinEngagement(m, e, d) {
   d.engageOff = { x: Math.cos(ang) * 0.55, z: Math.sin(ang) * 0.55 };
   e.dom = clamp(e.dom + 0.14, -1, 1); e.progress += 0.08;
   m.audio.thud(0.4);
+}
+
+// One-on-one strip. Legal only when the tackler is alone; a second man in the tackle makes it a penalty.
+export function tryStrip(m, d) {
+  const e = d.engage;
+  if (!e || e.stripTried || m.ball.carrier !== e.carrier || e.progress > 0.9) return false;
+  e.stripTried = true;
+  const c = e.carrier;
+  if (e.tacklers.length > 1) { e.penalty = 'Two-man strip'; return false; }
+  const p = 0.24 + (d.attr.strength - c.attr.hand) / 260 + Math.max(0, e.dom) * 0.15;
+  if (chance(clamp(p, 0.05, 0.55))) {
+    endEngagement(m, e, false);
+    c.knockDown(0.7);
+    m.ball.give(d); d.setState('free');
+    m.poss = d.team; m.tackleCount = 0; m.gainLineX = d.p.x; m.lineBreakDone = false;
+    m.message('STRIPPED!', `${d.name} rips it free`, 1.6, 'good'); m.audio.roar(0.9);
+    m.emit('strip', { team: d.team, player: d });
+    if (d.team.human) m.setControlled(d);
+    return true;
+  }
+  e.progress += 0.05;
+  if (chance(0.2)) e.penalty = 'Strip (ball not held by one)';
+  return false;
 }
 
 export function tryBreak(m, c) {
@@ -198,6 +228,8 @@ function updateEngagement(m, e, dt) {
   c.speedH = Math.hypot(c.v.x, c.v.z);
   c.anim.fall = Math.min(1, e.progress);
   for (const d of e.tacklers) { d.p.x = c.p.x + d.engageOff.x; d.p.z = c.p.z + d.engageOff.z; d.v.copy(c.v); d.heading = headingOf(-d.engageOff.x, -d.engageOff.z); }
+  // holding the arm-grip on = holding down: slows the play-the-ball, but the referee may penalise it
+  if (e.gripBy && e.gripBy.controlled && m.input.held('faceB')) e.holdDown = (e.holdDown || 0) + dt;
   // AI defenders pile in
   if (hasBall && n < 3 && e.progress < 0.8) {
     for (const d of T.opp.players) {
@@ -227,6 +259,10 @@ function updateEngagement(m, e, dt) {
 
 function completeTackle(m, e) {
   const c = e.carrier;
+  if ((e.holdDown || 0) > 0.7) {
+    e.dom = Math.min(1, e.dom + 0.6);
+    if (!e.penalty && chance(0.32)) e.penalty = 'Holding down';
+  }
   endEngagement(m, e, true);
   c.knockDown(99, e.dom > 0.35);
   const d = e.tacklers[0];

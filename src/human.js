@@ -1,21 +1,26 @@
 // Translates player input into actions for the controlled player, and handles player switching.
-import { FIELD, OPEN_PLAY_KICKS } from './config.js';
+//
+// Layout (keyboard / pad):
+//   move WASD / L-stick · sprint Shift / RT · pass Q E / LB RB (hold + K L I / A B Y picks the 1st/2nd/3rd man,
+//   double-tap = flat pass) · right stick = arrows: ←/→ sidestep, ↑ shoulder, ↓ fend (hold it to keep the arm out)
+//   quick kicks: K punt, L grubber, J chip, U field goal · aimed kicks: hold Space / LT + K L J I U
+//   defence: K low tackle, L arm-grip ("ball and all"), I dive, J strip / jump · Q E switch player
+import { FIELD } from './config.js';
 import { clamp, dist2D, headingOf, wrapAngle } from './util.js';
 import { MOBILE_STATES } from './player.js';
 import * as A from './actions.js';
-import { attemptTackle, tryBreak } from './contact.js';
+import { attemptTackle, tryBreak, tryStrip } from './contact.js';
 
 const H = FIELD.half;
-const hold = { passL: false, passR: false };
+const QUICK = { faceA: 'punt', faceB: 'grubber', faceX: 'chip', fieldGoal: 'fieldgoal' };
+const AIMED = { faceA: 'punt', faceB: 'grubber', faceX: 'chip', faceY: 'bomb', fieldGoal: 'fieldgoal' };
+const RECEIVER = { faceA: 0, faceB: 1, faceY: 2 };
+// per-bumper pass state: used = a face button already chose the receiver
+const passSt = { passL: { used: false, pending: null }, passR: { used: false, pending: null } };
 
 export function updateHuman(m, dt) {
   const T = m.humanTeam, inp = m.input;
   if (!T) return;
-  for (let i = 1; i <= 5; i++) if (inp.pressed('k' + i) && m.phase === 'play') { m.selectedKick = i - 1; if (m.kickAim) m.kickAim.type = OPEN_PLAY_KICKS[i - 1]; }
-  if (m.phase === 'play' || m.phase === 'ptb') {
-    if (inp.pressed('kickNext')) cycleKick(m, 1);
-    if (inp.pressed('kickPrev')) cycleKick(m, -1);
-  }
   if (m.phase === 'play' && inp.pressed('foot') && !m.kickAim) { m.humanFoot = (m.humanFoot || m.controlled?.attr.foot || 'R') === 'R' ? 'L' : 'R'; m.audio.ui(); }
   if (m.phase !== 'play' && m.phase !== 'ptb') return;
   autoSwitch(m);
@@ -27,28 +32,24 @@ export function updateHuman(m, dt) {
     if (p.team === m.pd.team) return; // dummy half is walked into place by the AI
     if (MOBILE_STATES.has(p.state)) {
       p.wish.x = mv.x; p.wish.z = mv.z; p.wantSprint = inp.held('sprint'); p.faceTarget = headingOf(-p.team.opp.dir, 0);
-      const D = p.team, lim = m.pd.onsideAx * D.dir;
+      const D = p.team;
       if (!p.ai.marker && p.p.x * D.dir > m.pd.onsideAx - 0.3 && p.wish.x * D.dir > 0 && !p.offside) p.wish.x = 0; // can't creep offside
     }
     if (inp.pressed('passL')) switchNearest(m, 0);
-    if (inp.pressed('passR')) switchNearest(m, 1);
+    if (inp.pressed('passR') || inp.pressed('kickMod')) switchNearest(m, inp.pressed('kickMod') ? 0 : 1);
     return;
   }
   if (MOBILE_STATES.has(p.state) && p.state !== 'kick') {
     p.wish.x = mv.x; p.wish.z = mv.z; p.wantSprint = inp.held('sprint'); p.faceTarget = null;
   }
   if (b.state === 'held' && b.carrier === p) return carrier(m, p, mv, dt);
-  if (b.state === 'held' && b.carrier && b.carrier.team !== T) return defend(m, p, dt);
+  if (b.state === 'held' && b.carrier && b.carrier.team !== T) return defend(m, p);
+  if (p.state === 'tackling') return defend(m, p);
   if (b.state !== 'held') {
-    if (inp.pressed('passL')) switchToBall(m, 0);
-    if (inp.pressed('passR')) switchToBall(m, 1);
+    if (inp.pressed('passL')) switchNearest(m, 0);
+    if (inp.pressed('passR')) switchNearest(m, 1);
+    if (inp.pressed('faceX')) p.doJump();          // contest the high ball
   }
-}
-
-function cycleKick(m, d) {
-  m.selectedKick = (m.selectedKick + d + OPEN_PLAY_KICKS.length) % OPEN_PLAY_KICKS.length;
-  if (m.kickAim) m.kickAim.type = OPEN_PLAY_KICKS[m.selectedKick];
-  m.audio.ui();
 }
 
 function autoSwitch(m) {
@@ -94,16 +95,17 @@ function switchNearest(m, rank) {
   }
   m.setControlled(pick); m.audio.ui();
 }
-function switchToBall(m, rank) { switchNearest(m, rank); }
 
-function sideFromInput(m, p, mv, fallbackAway = true) {
+// Converts a screen-space flick (right stick / arrow keys) to the carrier's left (-1) or right (+1).
+function flickSide(m, p, sx) {
+  const w = m.camRig.inputToWorld(sx, 0), r = p.right;
+  return w.x * r.x + w.z * r.z >= 0 ? 1 : -1;
+}
+function sideFromInput(m, p, mv) {
   const r = p.right, lat = mv.x * r.x + mv.z * r.z;
   if (Math.abs(lat) > 0.3) return lat > 0 ? 1 : -1;
-  if (!fallbackAway) return 1;
-  const e = m.nearest(p.team.opp.players, p.p.x, p.p.z, (q) => q.isUpright());
-  if (!e) return 1;
-  const s = (e.p.x - p.p.x) * r.x + (e.p.z - p.p.z) * r.z;
-  return s > 0 ? -1 : 1;
+  const c = A.passCandidates(m, p, 1).length, l = A.passCandidates(m, p, -1).length;
+  return c >= l ? 1 : -1;
 }
 
 function carrier(m, p, mv, dt) {
@@ -111,43 +113,71 @@ function carrier(m, p, mv, dt) {
   if (p.state === 'tackled') {
     if (inp.pressed('passL')) A.offload(m, p, -1);
     else if (inp.pressed('passR')) A.offload(m, p, 1);
-    if (inp.pressed('fend') || inp.pressed('bump')) tryBreak(m, p);
-    if ((inp.pressed('sprint') || inp.pressed('step')) && p.engage) p.engage.legDrive = Math.min(1.6, p.engage.legDrive + 0.35);
+    if (inp.pressed('rsUp') || inp.pressed('rsDown') || inp.pressed('rsLeft') || inp.pressed('rsRight')) tryBreak(m, p);
+    if (inp.pressed('sprint') && p.engage) p.engage.legDrive = Math.min(1.6, p.engage.legDrive + 0.35);
     return;
   }
-  if (m.kickAim) return kickAim(m, p, mv, dt);
-  // passing: tap = to the nearest runner, hold = cut-out / long ball
-  for (const [btn, side] of [['passL', -1], ['passR', 1]]) {
-    if (inp.pressed(btn)) hold[btn] = false;
-    const fire = (long) => {
-      hold[btn] = true;
-      const q = A.pickReceiver(m, p, side, long);
-      if (q) A.passBall(m, p, q, { long });
-    };
-    if (!hold[btn] && inp.held(btn) && inp.holdTime(btn) > 0.24) fire(true);
-    else if (!hold[btn] && inp.released(btn)) fire(false);
+  if (m.kickAim) return kickAim(m, p, dt);
+  const inGoal = p.p.x * T.dir > H;
+  // ---- passing: bumper picks the side; tap = next man, bumper + face button = choose the man, double-tap = flat
+  for (const btn of ['passL', 'passR']) {
+    const side = btn === 'passL' ? -1 : 1, st = passSt[btn];
+    if (inp.pressed(btn)) { st.used = false; st.pending = null; }
+    if (inp.held(btn)) {
+      for (const f in RECEIVER) {
+        if (!inp.pressed(f)) continue;
+        st.used = true;
+        if (st.pending && st.pending.face === f && inp.doubleTapped(f)) { firePass(m, p, side, RECEIVER[f], true); st.pending = null; }
+        else st.pending = { face: f, t: 0.22 };
+      }
+    }
+    if (st.pending) {
+      st.pending.t -= dt;
+      if (st.pending.t <= 0) { firePass(m, p, side, RECEIVER[st.pending.face], false); st.pending = null; }
+    }
+    if (inp.released(btn) && !st.used) firePass(m, p, side, 0, inp.doubleTapped(btn));
     if (m.ball.carrier !== p) return;
   }
-  if (p.p.x * T.dir <= H) {
-    if (inp.pressed('step')) p.doStep(sideFromInput(m, p, mv));
-    if (inp.pressed('fend')) {
+  const passHeld = inp.held('passL') || inp.held('passR');
+  // ---- right stick: evasion
+  if (!inGoal) {
+    if (inp.pressed('rsLeft')) p.doStep(flickSide(m, p, -1));
+    if (inp.pressed('rsRight')) p.doStep(flickSide(m, p, 1));
+    if (inp.pressed('rsUp')) p.doBump();
+    if (inp.pressed('rsDown')) {
       const e = m.nearest(T.opp.players, p.p.x, p.p.z, (q) => q.isUpright());
       const r = p.right; const s = e ? ((e.p.x - p.p.x) * r.x + (e.p.z - p.p.z) * r.z > 0 ? 1 : -1) : 1;
       p.doFend(s);
     }
-    if (inp.pressed('bump')) p.doBump();
+    if (inp.held('rsDown')) p.holdFend();
   }
-  if (inp.pressed('dummy')) A.dummyPass(m, p, sideFromInput(m, p, mv));
-  if (inp.pressed('kick') && p.canAct()) {
-    const type = OPEN_PLAY_KICKS[m.selectedKick];
-    const yaw = type === 'fieldgoal' ? headingOf(T.dir * H - p.p.x, -p.p.z) : headingOf(T.dir, 0);
-    m.kickAim = { type, yaw, holdT: 0, power: 0, foot: m.humanFoot || p.attr.foot, over: 0 };
+  if (passHeld || inGoal || !p.canAct()) return;
+  // ---- kicks: hold the left trigger (Space) for an aimed kick, otherwise a quick kick where you're facing
+  const aimed = inp.held('kickMod');
+  for (const f of Object.keys(aimed ? AIMED : QUICK)) {
+    if (!inp.pressed(f)) continue;
+    const type = (aimed ? AIMED : QUICK)[f];
+    const foot = m.humanFoot || p.attr.foot;
+    if (aimed) {
+      const yaw = type === 'fieldgoal' ? headingOf(T.dir * H - p.p.x, -p.p.z) : headingOf(T.dir, 0);
+      m.kickAim = { type, btn: f, yaw, holdT: 0, power: 0, foot, over: 0 };
+    } else A.quickKick(m, p, type, foot);
+    return;
   }
+  if (!aimed && inp.pressed('faceY')) A.dummyPass(m, p, sideFromInput(m, p, mv));
 }
 
-function kickAim(m, p, mv, dt) {
+function firePass(m, p, side, idx, flat) {
+  if (m.ball.carrier !== p || p.state === 'tackled') return;
+  const list = A.passCandidates(m, p, side);
+  if (!list.length) return;
+  const c = list[Math.min(idx, list.length - 1)];
+  A.passBall(m, p, c.q, { long: idx > 0 || c.lat > 12, flat });
+}
+
+function kickAim(m, p, dt) {
   const inp = m.input, ka = m.kickAim, T = p.team;
-  if (!inp.held('kick') && !inp.released('kick')) { m.kickAim = null; return; }
+  if (!inp.held(ka.btn) && !inp.released(ka.btn)) { m.kickAim = null; return; }
   ka.holdT += dt;
   // turn the aim toward screen-right when pushing right
   const cr = m.camRig.screenRight();
@@ -162,7 +192,7 @@ function kickAim(m, p, mv, dt) {
   p.wish.x = T.dir * fwd; p.wish.z = 0;
   if (inp.pressed('foot')) { ka.foot = ka.foot === 'R' ? 'L' : 'R'; m.humanFoot = ka.foot; }
   if (inp.pressed('passL') || inp.pressed('passR')) { m.kickAim = null; return; }
-  if (inp.released('kick')) {
+  if (inp.released(ka.btn)) {
     const k = m.kickAim; m.kickAim = null;
     A.kickBall(m, p, k.type, k.yaw, Math.max(0.05, k.power), { foot: k.foot, extraErr: Math.min(0.12, k.over * 0.1) });
   }
@@ -170,11 +200,14 @@ function kickAim(m, p, mv, dt) {
 
 function defend(m, p) {
   const inp = m.input, c = m.ball.carrier;
-  if (inp.pressed('passL')) return switchNearest(m, 0);
+  if (p.state === 'tackling') {
+    if (inp.pressed('faceX')) tryStrip(m, p);
+    return;
+  }
+  if (inp.pressed('passL') || inp.pressed('kickMod')) return switchNearest(m, 0);
   if (inp.pressed('passR')) return switchNearest(m, 1);
   if (!c || p.state !== 'free') return;
-  const dd = dist2D(p.p.x, p.p.z, c.p.x, c.p.z);
-  if (inp.pressed('step')) attemptTackle(m, p, p.speedH > 6.5 && dd > 2.1 ? 'dive' : 'normal', { human: true });
-  else if (inp.pressed('fend')) attemptTackle(m, p, 'hit', { human: true });
-  else if (inp.pressed('bump')) attemptTackle(m, p, 'dive', { human: true });
+  if (inp.pressed('faceA')) attemptTackle(m, p, 'low', { human: true });
+  else if (inp.pressed('faceB')) attemptTackle(m, p, 'grip', { human: true });
+  else if (inp.pressed('faceY')) attemptTackle(m, p, 'dive', { human: true });
 }

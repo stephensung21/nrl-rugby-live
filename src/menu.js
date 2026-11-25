@@ -5,30 +5,36 @@ const el = (tag, cls, parent, html) => { const e = document.createElement(tag); 
 
 const touchOnly = () => { try { return matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches; } catch { return false; } };
 
+// Console-style layout: WASD = left stick, arrows = right stick, I J K L = Y X A B, Space = left trigger.
 export const CONTROLS = [
-  ['Move', 'W A S D / Arrows', 'Left stick'],
+  ['Move', 'W A S D', 'Left stick'],
   ['Sprint', 'Shift', 'RT'],
   ['— ATTACK —', '', ''],
-  ['Pass left / right (tap)', 'Q / E', 'LB / RB'],
-  ['Cut-out pass (hold)', 'Hold Q / E', 'Hold LB / RB'],
-  ['Sidestep (push a direction)', 'Space or J', 'A'],
-  ['Fend (hand-off)', 'F or K', 'B'],
-  ['Shoulder charge', 'R or L', 'X'],
-  ['Dummy pass', 'X or U', 'LT'],
-  ['Kick: hold for power, steer aim', 'Hold G or I', 'Hold Y'],
-  ['Kick type: punt / bomb / grubber / chip / field goal', '1-5 or Tab', 'D-pad ← →'],
-  ['Kicking foot (left / right)', 'V or O', 'D-pad ↑'],
-  ['In a tackle: offload / fight / leg drive', 'Q,E / F,R / mash Shift', 'LB,RB / B,X / mash RT'],
-  ['Ground the ball in-goal', 'Space', 'A'],
+  ['Pass left / right to the next man', 'Q / E', 'LB / RB'],
+  ['Pick the 1st / 2nd / 3rd man (cut-out)', 'hold Q or E + K / L / I', 'hold LB or RB + A / B / Y'],
+  ['Flat pass (runner hits it at pace, riskier)', 'double-tap', 'double-tap'],
+  ['Sidestep', '← / →', 'Flick right stick ← →'],
+  ['Fend (hold to keep the arm out)', '↓', 'Right stick ↓'],
+  ['Shoulder charge / bust a tackle', '↑', 'Right stick ↑'],
+  ['Dummy pass', 'I', 'Y'],
+  ['Quick kick: punt / grubber / chip / field goal', 'K / L / J / U', 'A / B / X / R3'],
+  ['Aimed kick: hold, steer with A/D, release', 'hold Space + K L J I U', 'hold LT + A B X Y R3'],
+  ['   …aimed kick types', 'punt · grubber · chip · bomb · field goal', ''],
+  ['Kicking foot (left / right)', 'V', 'D-pad ↑'],
+  ['In a tackle: offload / fight / leg drive', 'Q,E / arrows / mash Shift', 'LB,RB / R-stick / mash RT'],
+  ['Ground the ball in-goal', 'K', 'A'],
   ['— DEFENCE —', '', ''],
-  ['Tackle', 'Space or J', 'A'],
-  ['Big hit (risky)', 'F or K', 'B'],
-  ['Dive tackle', 'R or L', 'X'],
-  ['Switch player (nearest / next)', 'Q / E', 'LB / RB'],
+  ['Low tackle (safe, but arms stay free)', 'K', 'A'],
+  ['Arm-grip "ball and all" (no offload, risky)', 'L — keep held to hold down', 'B'],
+  ['Dive tackle', 'I', 'Y'],
+  ['Strip (one-on-one) / jump for a high ball', 'J', 'X'],
+  ['Switch player (nearest / next)', 'Q / E', 'LB / RB (or LT)'],
   ['— SET PIECES —', '', ''],
-  ['Goal kick: move ball back', 'W / S', 'Left stick ↕'],
-  ['Aim / height', 'A D / W S', 'Left stick'],
-  ['Power (meter swings back!)', 'Hold Space or G', 'Hold A or Y'],
+  ['Conversion: move the ball back, then set', 'W / S, then K', 'Left stick ↕, then A'],
+  ['Aim (line up the seam) / trajectory', 'A D / W S', 'Left stick'],
+  ['Power — release before the red zone', 'hold K', 'hold A'],
+  ['Short kick-off', 'hold L', 'hold B'],
+  ['Penalty: goal / touch / tap', 'K / L / J', 'A / B / X'],
   ['— GENERAL —', '', ''],
   ['Camera (behind / broadcast / high)', 'C', 'View'],
   ['Pause', 'Esc / P', 'Start'],
@@ -82,7 +88,7 @@ export class Menu {
           <span class="val"><button data-i="${i}" data-d="-1">◀</button><span>${row.key === 'home' || row.key === 'away' ? this.swatch(TEAMS[c[row.key]]) : ''}${row.vals[c[row.key]]}</span><button data-i="${i}" data-d="1">▶</button></span></div>`).join('')}</div>
         <div class="btns"><button class="go" data-a="start">KICK OFF ▶</button><button data-a="controls">Controls</button></div>
         ${touchOnly() ? '<div class="touchnote">Footy 13 is played with a keyboard or a gamepad. Connect one to take control, or pick “Watch” to see a CPU match.</div>' : ''}
-        <div class="foot">Keyboard or gamepad · ↑↓ choose · ←→ change · Enter to start</div></div>`;
+        <div class="foot">Keyboard or gamepad · W/S choose · A/D change · Enter to start · H for controls</div></div>`;
     }
     r.querySelectorAll('button[data-d]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); this.change(+b.dataset.i, +b.dataset.d); }));
     r.querySelectorAll('.row').forEach((row) => row.addEventListener('click', () => { this.sel = +row.dataset.i; this.render(); }));
@@ -103,12 +109,12 @@ export class Menu {
   hide() { this.visible = false; this.root.style.display = 'none'; }
   update(input) {
     if (!this.visible) return;
-    if (this.page === 'controls') { if (input.pressed('pause') || input.pressed('confirm') || input.pressed('fend')) this.act('back'); return; }
+    if (this.page === 'controls') { if (input.pressed('pause') || input.pressed('confirm') || input.pressed('faceB') || input.pressed('back')) this.act('back'); return; }
     if (input.pressed('menuUp')) { this.sel = (this.sel + this.rows.length - 1) % this.rows.length; this.render(); }
     if (input.pressed('menuDown')) { this.sel = (this.sel + 1) % this.rows.length; this.render(); }
-    if (input.pressed('left') || input.pressed('kickPrev')) this.change(this.sel, -1);
-    if (input.pressed('right') || input.pressed('kickNext')) this.change(this.sel, 1);
-    if (input.pressed('confirm') || input.pressed('pause') && false) this.act('start');
+    if (input.pressed('menuLeft')) this.change(this.sel, -1);
+    if (input.pressed('menuRight')) this.change(this.sel, 1);
+    if (input.pressed('confirm')) this.act('start');
     if (input.pressed('help')) this.act('controls');
   }
 }
