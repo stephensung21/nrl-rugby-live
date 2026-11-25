@@ -136,7 +136,7 @@ export class HUD {
     const c = m.controlled;
     if (c && m.humanTeam) {
       this.card.style.display = '';
-      this.card.innerHTML = `<div class="num" style="--c:${c.team.kit.primary};--c2:${c.team.kit.secondary}">${c.num}</div><div class="info"><b>${c.name}</b><small>${POSITION_NAMES[c.pos]}</small>
+      this.card.innerHTML = `<div class="num" style="--c:${c.team.kit.primary};--c2:${c.team.kit.secondary}">${c.num}</div><div class="info"><b>${c.fullName}</b><small>${POSITION_NAMES[c.pos]} · OVR <b class="ovr">${c.ovr}</b>${c.star ? ' <span class="star">★</span>' : ''} · SPD ${c.attr.speed} · STR ${c.attr.strength}</small>
         <div class="stam"><i style="width:${Math.round(c.stamina * 100)}%;background:${c.stamina < 0.3 ? '#ff5a3a' : '#7dff5a'}"></i></div></div>`;
     } else this.card.style.display = 'none';
     // kick panel + wind

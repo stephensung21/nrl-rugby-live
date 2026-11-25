@@ -54,6 +54,12 @@ Press **H** in a match for this list.
 
 ## What's in it
 
+- **Squads:** eight fictional clubs with fixed 13-man squads. The players and their ratings are the same every match.
+  - Every player has nine ratings (speed, acceleration, agility, strength, tackling, passing, kicking, handling, stamina), an overall rating weighted by position, a kicking foot, an age, and a height and weight that set his size and mass.
+  - Each club has two or three stars and leans a different way: a big pack, fast backs, or a clever spine.
+  - **Squads** on the main menu, or in the pause menu during a match, shows every sheet.
+  - The squads live in `src/squads.js`, which can be hand-edited. `node scripts/gen-squads.mjs` regenerates them from fixed seeds.
+
 - **Match:** 13 v 13 single match, selectable half length, difficulty, wind, kick-off time (day / twilight / night under floodlights), camera and golden point.
 - **Rules:** six-tackle sets, play-the-ball with markers and the 10m defensive line (offside defenders can't tackle), handovers, "six again" ruck calls, knock-ons, forward passes (judged relative to the passer's momentum), scrums, tries, conversions, penalty goals, field goals, kicking for touch, tap restarts, 40/20 and 20/40, goal-line drop-outs, 20m restarts, held up in-goal, reaching out to score, being bundled into touch, kick-off 10m and out-on-the-full rules, the siren (play continues until the ball is dead), half time and golden point.
 - **Ball physics:** quadratic drag, wind (stronger higher up), kicking-foot curve (a right-footer hooks it left), weak-foot penalty, overcooked-power error, unpredictable oval bounces, end-over-end grubbers, charge-downs, and the ball hitting the posts and crossbar. Goal kicks have no trajectory guide: you line up the seam and judge the wind yourself.
@@ -84,6 +90,7 @@ The game is plain ES modules in `src/`, bundled with esbuild into one IIFE, so `
 
 | File | Role |
 |---|---|
+| `squads.js`, `ratings.js`, `teams.js` | Fixed squads, rating templates and overall ratings, clubs and kits |
 | `match.js` | Phases, rules, restarts, clock, scoring |
 | `actions.js` | Passing, kicking, gathering, boundary rules, goal-kick solver |
 | `contact.js` | Tackles, evasion contests, engagements |

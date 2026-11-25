@@ -5,8 +5,8 @@ import { clamp, damp, lerp, smooth01 } from './util.js';
 
 // Each team gets ONE texture atlas (8x8 cells of 128px) holding every number, kit panel, skin tone,
 // face and hair colour. Each player is ONE skinned mesh => one draw call per footballer.
-export const SKIN_TONES = ['#f1c9a5', '#e0ac82', '#c68a5e', '#a36a42', '#7a4a2c', '#5a3520', '#d9a47a', '#8d5a3a'];
-export const HAIR_COLS = ['#1a1209', '#2b1a0d', '#4a2c14', '#7a5229', '#c9a25a', '#0d0d0d', '#5e3a1c', '#3a2a1a'];
+import { SKIN_TONES, HAIR_COLS } from './config.js';
+export { SKIN_TONES, HAIR_COLS };
 const CELL = { back0: 13, front: 14, side: 15, top: 16, sleeve: 17, shorts: 18, socks: 19, boots: 20, gear: 21, skin: 22, face: 30, hair: 38 };
 
 function drawPattern(g, w, h, kit, front) {

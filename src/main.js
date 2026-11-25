@@ -62,6 +62,7 @@ const pause = new PauseMenu(app, {
   cameraName: () => ({ behind: 'Behind play', broadcast: 'Broadcast', high: 'High' })[camRig.mode],
   sound: () => audio.setMuted(!audio.muted),
   soundName: () => (audio.muted ? 'Off' : 'On'),
+  teams: () => (match ? match.teams.map((t) => t.def) : []),
 });
 hud.onMenu = () => startDemo();
 hud.onRematch = () => startGame(lastCfg);

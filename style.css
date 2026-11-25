@@ -118,3 +118,30 @@ kbd { font: 700 11px/1 system-ui, sans-serif; background: #f4f4f4; color: #111; 
   .row .val > span { min-width: 120px; font-size: 12px; }
   .logo { font-size: 44px; }
 }
+
+/* squads */
+.menu-panel.wide { width: min(980px, 100%); }
+.sq-nav { display: flex; align-items: center; justify-content: center; gap: 10px; font: 700 13px system-ui; color: #b9c4d0; margin-bottom: 8px; }
+.sq-nav button { margin: 0; padding: 6px 12px; }
+.sq-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.sq-head .swatch { width: 30px; height: 38px; }
+.sq-head > div > b { font: 900 22px var(--hud-font); }
+.sq-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.sq-chips span { font: 700 11px system-ui; color: #b9c4d0; background: rgba(255,255,255,.08); border-radius: 4px; padding: 3px 7px; letter-spacing: .5px; }
+.sq-chips b { color: #fff; font-size: 13px; margin-left: 3px; font-variant-numeric: tabular-nums; }
+.sq-wrap { overflow-x: auto; max-height: min(58vh, 520px); overflow-y: auto; border-radius: 6px; }
+.sq { width: 100%; border-collapse: collapse; font: 600 12px system-ui; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sq th { position: sticky; top: 0; background: #1a2230; color: #9fb0c3; font: 800 10px system-ui; letter-spacing: 1px; padding: 6px 5px; text-align: center; cursor: default; }
+.sq td { padding: 4px 5px; text-align: center; border-bottom: 1px solid rgba(255,255,255,.06); }
+.sq td.nm, .sq th.nm { text-align: left; }
+.sq td.n { color: #9fb0c3; }
+.rt { display: inline-block; min-width: 26px; border-radius: 4px; padding: 1px 3px; }
+.rt.r90 { background: #ffd23a; color: #111; }
+.rt.r80 { background: #2f8f4e; color: #fff; }
+.rt.r70 { background: rgba(255,255,255,.12); color: #fff; }
+.rt.r60 { color: #8796a8; }
+.star { color: #ffd23a; }
+.sq-key { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 8px; font: 600 11px system-ui; color: #8796a8; }
+.sq-key b { color: #cfd6df; }
+em.ovr { font-style: normal; font: 800 11px system-ui; background: rgba(255,255,255,.12); border-radius: 4px; padding: 1px 5px; color: #ffd23a; }
+.pcard .info small b.ovr { color: #ffd23a; }

@@ -8,6 +8,7 @@ export const MOBILE_STATES = new Set(['free', 'step', 'fend', 'bump', 'stumble',
 export class Player {
   constructor(team, r, model) {
     this.team = team; this.num = r.num; this.pos = r.pos; this.name = r.name; this.attr = r.attr; this.mass = r.mass;
+    this.fullName = r.fullName || r.name; this.ovr = r.ovr ?? 0; this.age = r.age; this.heightCm = r.heightCm; this.weightKg = r.weightKg; this.star = !!r.star;
     this.isForward = FORWARDS.has(r.num);
     this.model = model;
     this.p = new THREE.Vector3(); this.v = new THREE.Vector3();

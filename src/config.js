@@ -54,3 +54,7 @@ export const WIND_PRESETS = {
   breezy: { min: 2.5, max: 5.0, gust: 0.25 },
   gusty:  { min: 5.5, max: 9.0, gust: 0.45 },
 };
+
+// Appearance palettes (the model atlas has one cell per entry).
+export const SKIN_TONES = ['#f1c9a5', '#e0ac82', '#c68a5e', '#a36a42', '#7a4a2c', '#5a3520', '#d9a47a', '#8d5a3a'];
+export const HAIR_COLS = ['#1a1209', '#2b1a0d', '#4a2c14', '#7a5229', '#c9a25a', '#0d0d0d', '#5e3a1c', '#3a2a1a'];
