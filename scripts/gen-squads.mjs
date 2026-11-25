@@ -2,15 +2,16 @@
 //
 // Ratings come from real 2026 NRL performance stats (per-80-minute rates from the nrl-predictor
 // dataset), compared with every other first-grader in the same position. Each fictional club takes
-// its 13 from one real club's most-used starters in jerseys 1-13. Identities are NOT carried over:
-// names, ages, builds and looks are invented, and no name or surname matches a real player.
+// its 13 from one real club's most-used starters in jerseys 1-13. With --fetch-profiles, heights, weights
+// and ages come from the players' public profiles. Identities are NOT carried over: names and looks are
+// invented, and no name or surname matches a real player.
 //
 //   node scripts/gen-squads.mjs [path/to/player_match_stats.csv]
 //   (default: ../stephensung21/nrl-predictor/data/processed/player_match_stats.csv)
 //
 // Only the fictional squads are written to src/squads.js. Pass --show-sources to print which real
 // player each rating line came from (console only; it is never written to the repo).
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { TEAMS } from '../src/teams.js';
 import { TEMPLATES, ATTRS, playerOverall, teamRatings } from '../src/ratings.js';
 import { POSITIONS, SKIN_TONES, HAIR_COLS } from '../src/config.js';
@@ -19,6 +20,14 @@ const SEASON = '2026';
 const csvPath = process.argv.slice(2).find((a) => !a.startsWith('--'))
   || new URL('../../stephensung21/nrl-predictor/data/processed/player_match_stats.csv', import.meta.url).pathname;
 const SHOW = process.argv.includes('--show-sources');
+// --fetch-profiles: read height, weight and date of birth for each selected player from his nrl.com
+// profile (falling back to the club-site profile linked from the match centre). Cached in
+// data/physicals.json, which is gitignored: real names never go into the repo, only the numbers do.
+const FETCH = process.argv.includes('--fetch-profiles');
+const RETRY = process.argv.includes('--retry-missing');
+const CACHE = new URL('../data/physicals.json', import.meta.url);
+const AGE_ON = new Date('2026-11-25T00:00:00Z');
+const cache = existsSync(CACHE) ? JSON.parse(readFileSync(CACHE, 'utf8')) : {};
 if (!existsSync(csvPath)) { console.error(`stats file not found: ${csvPath}`); process.exit(1); }
 
 // fictional club <- real club whose 2026 starters it is rated from
@@ -108,6 +117,58 @@ function ratingsFor(p, pos) {
   return attr;
 }
 
+// ---------------------------------------------------------------- real physicals (height, weight, age)
+const UA = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' };
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const slug = (x) => x.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/['’.]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+async function get(url) {
+  await sleep(1000); // be polite: one request a second
+  try { const r = await fetch(url, { headers: UA }); return r.ok ? await r.text() : null; } catch { return null; }
+}
+function parseProfile(page) {
+  const t = page.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+  const h = t.match(/Height:\s*(\d{3})\s*cm/), w = t.match(/Weight:\s*(\d{2,3})\s*kg/), d = t.match(/Date of Birth:\s*(\d{1,2} [A-Za-z]+ \d{4})/);
+  if (!h && !w && !d) return null;
+  return { h: h ? +h[1] : null, w: w ? +w[1] : null, dob: d ? new Date(d[1] + ' UTC').toISOString().slice(0, 10) : null };
+}
+const matchesPath = csvPath.replace(/player_match_stats\.csv$/, 'matches.csv');
+const teamMatches = (team) => (existsSync(matchesPath) ? parseCSV(readFileSync(matchesPath, 'utf8')) : [])
+  .filter((m) => m.season === SEASON && (m.home_team === team || m.away_team === team) && m.url).reverse();
+async function clubSiteUrl(team, playerId) {
+  for (const m of teamMatches(team).slice(0, 6)) {
+    const page = await get(m.url);
+    const q = page && page.match(/id="vue-match-centre"[^>]*q-data="([^"]+)"/);
+    if (!q) continue;
+    const data = JSON.parse(q[1].replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&#39;/g, "'"));
+    for (const side of [data.match.homeTeam, data.match.awayTeam]) for (const p of side.players || []) if (String(p.playerId) === String(playerId)) return p.url;
+  }
+  return null;
+}
+async function fetchPhysicals(team, p) {
+  if (cache[p.id] && !(cache[p.id].missing && RETRY)) return cache[p.id];
+  let found = null;
+  const url = `https://www.nrl.com/players/nrl-premiership/${slug(team)}/${slug(p.name)}/`;
+  let page = await get(url);
+  if (page) found = parseProfile(page);
+  // moved club (or the profile sits under his 2027 club): try the same profile under every other club
+  for (const other of ALL_TEAMS) {
+    if (found || other === team) continue;
+    page = await get(`https://www.nrl.com/players/nrl-premiership/${slug(other)}/${slug(p.name)}/`);
+    if (page) found = parseProfile(page);
+  }
+  if (!found) {
+    const alt = await clubSiteUrl(team, p.id);
+    if (alt) { page = await get(alt); if (page) found = parseProfile(page); }
+  }
+  cache[p.id] = found || { missing: true };
+  mkdirSync(new URL('../data/', import.meta.url), { recursive: true });
+  writeFileSync(CACHE, JSON.stringify(cache, null, 1));
+  console.log(`  ${found ? 'ok     ' : 'missing'} ${team} ${p.id}${found ? ` ${found.h ?? '?'}cm ${found.w ?? '?'}kg ${found.dob ?? '?'}` : ''}`);
+  return cache[p.id];
+}
+const ALL_TEAMS = [...new Set(rows.map((r) => r.team))].sort();
+const ageOn = (dob) => { const b = new Date(dob + 'T00:00:00Z'); let a = AGE_ON.getUTCFullYear() - b.getUTCFullYear(); if (AGE_ON < new Date(Date.UTC(AGE_ON.getUTCFullYear(), b.getUTCMonth(), b.getUTCDate()))) a--; return a; };
+
 // ---------------------------------------------------------------- fictional identities
 function rng(seedStr) {
   let h = 2166136261;
@@ -138,6 +199,7 @@ const usedNames = new Set();
 
 // ---------------------------------------------------------------- build squads
 const squads = {}, sources = [];
+let physCount = 0;
 for (const club of TEAMS) {
   const real = SOURCE[club.id];
   const r = rng('footy13:' + club.id);
@@ -160,9 +222,17 @@ for (const club of TEAMS) {
     taken.add(src.id);
     const attr = ratingsFor(src, pos);
     attr.foot = r() < 0.8 ? 'R' : 'L';
-    const age = Math.round(Math.min(34, Math.max(19, 26 + r.gauss() * 3.4)));
+    // invented build by default; real height / weight / age when the profile was found
+    let age = Math.round(Math.min(34, Math.max(19, 26 + r.gauss() * 3.4)));
     const [hm, hs, wm, ws] = POS_BODY[pos];
-    const heightCm = Math.round(hm + r.gauss() * hs), weightKg = Math.round(wm + r.gauss() * ws + (attr.strength - TEMPLATES[pos].strength) * 0.3);
+    let heightCm = Math.round(hm + r.gauss() * hs), weightKg = Math.round(wm + r.gauss() * ws + (attr.strength - TEMPLATES[pos].strength) * 0.3);
+    const phys = FETCH ? await fetchPhysicals(real, src) : cache[src.id];
+    if (phys && !phys.missing) {
+      if (phys.h) heightCm = phys.h;
+      if (phys.w) weightKg = phys.w;
+      if (phys.dob) age = ageOn(phys.dob);
+      physCount++;
+    }
     let first, last;
     do { first = r.pick(FIRST); last = r() < 0.4 ? r.pick(P1) + r.pick(P2) + r.pick(P3) : r.pick(LAST); }
     while (usedNames.has(first + ' ' + last) || realSurnames.has(last.toLowerCase()) || realNames.has(`${first} ${last}`.toLowerCase()));
@@ -180,9 +250,10 @@ for (const club of TEAMS) {
 if (SHOW) console.log('\n' + sources.join('\n'));
 const body = Object.entries(squads).map(([id, l]) => `  ${id}: [\n${l.map((p) => '    ' + JSON.stringify(p)).join(',\n')},\n  ],`).join('\n');
 writeFileSync(new URL('../src/squads.js', import.meta.url), `// Fixed squads, generated by scripts/gen-squads.mjs (safe to hand-edit).
-// Ratings are derived from real ${SEASON} season performance stats; every name, age, build and look is fictional.
+// Ratings come from real ${SEASON} performance stats, and heights, weights and ages from public player profiles;
+// every name and look is fictional.
 export const SQUADS = {
 ${body}
 };
 `);
-console.log('wrote src/squads.js');
+console.log(`wrote src/squads.js (real height/weight/age for ${physCount} of ${TEAMS.length * 13} players)`);
