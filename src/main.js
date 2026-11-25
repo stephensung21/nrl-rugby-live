@@ -10,12 +10,13 @@ import { CameraRig } from './camera.js';
 import { buildStadium } from './stadium.js';
 import { Match } from './match.js';
 import { TEAMS } from './teams.js';
+import { TouchControls } from './touch.js';
 
 const params = new URLSearchParams(location.search);
 if (params.get('seed')) setSeed(+params.get('seed'));
 const app = document.getElementById('app');
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance', preserveDrawingBuffer: params.has('test') });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, matchMedia('(pointer: coarse)').matches ? 1.5 : 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 app.appendChild(renderer.domElement);
@@ -63,6 +64,9 @@ const pause = new PauseMenu(app, {
   sound: () => audio.setMuted(!audio.muted),
   soundName: () => (audio.muted ? 'Off' : 'On'),
   teams: () => (match ? match.teams.map((t) => t.def) : []),
+});
+const touch = new TouchControls(app, input, {
+  fullscreen: () => { const d = document.documentElement; try { (document.fullscreenElement ? document.exitFullscreen() : d.requestFullscreen?.())?.catch?.(() => {}); } catch { /* not supported (e.g. iPhone) */ } },
 });
 hud.onMenu = () => startDemo();
 hud.onRematch = () => startGame(lastCfg);
@@ -117,6 +121,7 @@ function frame(now) {
     stadium.update(dt, time, match.wind, match.excite);
     audio.update(dt, mode === 'playing' ? match.excite : 0);
     hud.update(match, camera, dt);
+    touch.update(match, mode === 'playing', paused);
     updateScreen();
     renderer.render(scene, camera);
   }
@@ -125,7 +130,7 @@ function frame(now) {
 // test / debug hooks
 window.__game = {
   match: null,
-  input, camRig,
+  input, camRig, touch,
   sim(seconds) { const n = Math.round(seconds / DT); for (let i = 0; i < n; i++) match.update(DT); return this.summary(); },
   summary() { const [a, b] = match.teams; return { phase: match.phase, half: match.half, clock: match.clockText(), score: `${a.short} ${a.score}-${b.score} ${b.short}`, tackle: match.tackleCount, over: match.over }; },
   start(cfg) { startGame(cfg); },

@@ -111,7 +111,8 @@ kbd { font: 700 11px/1 system-ui, sans-serif; background: #f4f4f4; color: #111; 
 .ctrl { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ctrl td { padding: 4px 6px; border-bottom: 1px solid rgba(255,255,255,.07); }
 .ctrl tr.sec th { text-align: left; padding: 10px 6px 4px; color: var(--gold); font: 900 12px var(--hud-font); letter-spacing: 1px; }
-.ctrl td:nth-child(2), .ctrl td:nth-child(3) { text-align: center; }
+.ctrl td:nth-child(2), .ctrl td:nth-child(3), .ctrl td:nth-child(4) { text-align: center; }
+.ctrl tr.hdr th { font: 800 10px system-ui; color: #9fb0c3; letter-spacing: 1px; padding: 4px 6px; }
 @media (max-width: 720px) {
   .minimap, .feed, .hint { display: none; }
   .kickpanel { min-width: 0; } .kickpanel .ktypes { display: none; }
@@ -145,3 +146,51 @@ kbd { font: 700 11px/1 system-ui, sans-serif; background: #f4f4f4; color: #111; 
 .sq-key b { color: #cfd6df; }
 em.ovr { font-style: normal; font: 800 11px system-ui; background: rgba(255,255,255,.12); border-radius: 4px; padding: 1px 5px; color: #ffd23a; }
 .pcard .info small b.ovr { color: #ffd23a; }
+
+/* ---------------------------------------------------------------- touch controls */
+canvas, .touchpad { touch-action: none; }
+html, body { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
+.touchpad { position: absolute; inset: 0; z-index: 6; display: none; pointer-events: none; font-family: var(--hud-font); }
+.touchpad.show { display: block; }
+.tp-zone { position: absolute; bottom: 0; height: 72%; pointer-events: auto; }
+.tp-left { left: 0; width: 44%; }
+.tp-right { right: 0; width: 56%; }
+.tp-swipe-hint { position: absolute; left: 8px; top: 6px; font: 800 10px system-ui, sans-serif; letter-spacing: 1px; color: rgba(255,255,255,.35); pointer-events: none; }
+.tp-base { position: absolute; width: 124px; height: 124px; margin: -62px 0 0 -62px; border-radius: 50%; border: 3px solid rgba(255,255,255,.35); background: rgba(0,0,0,.18); display: none; }
+.tp-base.show { display: block; }
+.tp-knob { position: absolute; left: 33px; top: 33px; width: 52px; height: 52px; border-radius: 50%; background: rgba(255,255,255,.75); box-shadow: 0 3px 0 rgba(0,0,0,.4); }
+.tp-knob.sprint { background: #ffb43a; }
+.tp-btn { position: absolute; pointer-events: auto; border: 3px solid #000; color: #111; font: 900 11px/1.05 var(--hud-font); letter-spacing: .3px; text-align: center; padding: 0 4px; box-shadow: 0 4px 0 #000; touch-action: none; }
+.tp-btn.on { transform: translateY(3px); box-shadow: 0 1px 0 #000; filter: brightness(1.15); }
+.tp-btn.idle { opacity: .28; }
+.tp-btn.face { width: 66px; height: 66px; border-radius: 50%; }
+.fa { right: calc(88px + env(safe-area-inset-right, 0px)); bottom: calc(14px + env(safe-area-inset-bottom, 0px)); background: #5ad35a; }
+.fb { right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); background: #ff6a5a; }
+.fx { right: calc(160px + env(safe-area-inset-right, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); background: #5ab4ff; }
+.fy { right: calc(88px + env(safe-area-inset-right, 0px)); bottom: calc(154px + env(safe-area-inset-bottom, 0px)); background: #ffd23a; }
+.tp-btn.pill { height: 44px; width: 104px; border-radius: 22px; background: #e8eef5; bottom: calc(230px + env(safe-area-inset-bottom, 0px)); }
+.ppl { right: calc(126px + env(safe-area-inset-right, 0px)); }
+.ppr { right: calc(14px + env(safe-area-inset-right, 0px)); }
+.tp-btn.pill.long { background: #ffd23a; }
+.tp-btn.small { height: 38px; width: 74px; border-radius: 10px; background: #cfd6df; font-size: 10px; }
+.saim { right: calc(236px + env(safe-area-inset-right, 0px)); bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+.saim.latched { background: #ff8a2a; }
+.sfg { right: calc(236px + env(safe-area-inset-right, 0px)); bottom: calc(66px + env(safe-area-inset-bottom, 0px)); }
+.sfoot { right: calc(236px + env(safe-area-inset-right, 0px)); bottom: calc(114px + env(safe-area-inset-bottom, 0px)); }
+.tp-btn.top { top: calc(14px + env(safe-area-inset-top, 0px)); width: 46px; height: 36px; font-size: 11px; background: rgba(232, 238, 245, .9); }
+.tpause { right: calc(14px + env(safe-area-inset-right, 0px)); }
+.tcam { right: calc(68px + env(safe-area-inset-right, 0px)); }
+.tfs { right: calc(122px + env(safe-area-inset-right, 0px)); }
+.rotate { position: absolute; inset: 0; z-index: 30; display: none; place-items: center; background: rgba(5, 8, 12, .92); text-align: center; }
+.rotate.show { display: grid; }
+.rotate b { display: block; font: 900 24px var(--hud-font); color: var(--gold); margin-bottom: 6px; }
+.rotate span { color: #cfd6df; font: 600 14px system-ui; }
+/* the HUD makes room for the buttons on touch screens */
+body.touch .minimap, body.touch .kickpanel .krow, body.touch .feed { display: none; }
+body.touch .kickpanel { top: calc(60px + env(safe-area-inset-top, 0px)); right: calc(14px + env(safe-area-inset-right, 0px)); bottom: auto; min-width: 0; padding: 6px 8px; }
+body.touch .hint { bottom: auto; top: calc(62px + env(safe-area-inset-top, 0px)); max-width: calc(100vw - 340px); font-size: 11px; }
+body.touch .meter { bottom: auto; top: 30%; }
+body.touch .pcard { bottom: auto; top: calc(62px + env(safe-area-inset-top, 0px)); transform: scale(.85); transform-origin: top left; }
+body.touch .tackles { font-size: 12px; padding: 4px 8px; }
+.ctrl-wrap { overflow-x: auto; }
+body.touch .pcard .info small { white-space: nowrap; }

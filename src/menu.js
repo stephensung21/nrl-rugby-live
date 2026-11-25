@@ -9,37 +9,37 @@ const touchOnly = () => { try { return matchMedia('(pointer: coarse)').matches &
 
 // Console-style layout: WASD = left stick, arrows = right stick, I J K L = Y X A B, Space = left trigger.
 export const CONTROLS = [
-  ['Move', 'W A S D', 'Left stick'],
-  ['Sprint', 'Shift', 'RT'],
-  ['— ATTACK —', '', ''],
-  ['Pass left / right to the next man', 'Q / E', 'LB / RB'],
-  ['Pick the 1st / 2nd / 3rd man (cut-out)', 'hold Q or E + K / L / I', 'hold LB or RB + A / B / Y'],
-  ['Flat pass (runner hits it at pace, riskier)', 'double-tap', 'double-tap'],
-  ['Sidestep', '← / →', 'Flick right stick ← →'],
-  ['Fend (hold to keep the arm out)', '↓', 'Right stick ↓'],
-  ['Shoulder charge / bust a tackle', '↑', 'Right stick ↑'],
-  ['Dummy pass', 'I', 'Y'],
-  ['Quick kick: punt / grubber / chip / field goal', 'K / L / J / U', 'A / B / X / R3'],
-  ['Aimed kick: hold, steer with A/D, release', 'hold Space + K L J I U', 'hold LT + A B X Y R3'],
-  ['   …aimed kick types', 'punt · grubber · chip · bomb · field goal', ''],
-  ['Kicking foot (left / right)', 'V', 'D-pad ↑'],
-  ['In a tackle: offload / fight / leg drive', 'Q,E / arrows / mash Shift', 'LB,RB / R-stick / mash RT'],
-  ['Ground the ball in-goal', 'K', 'A'],
-  ['— DEFENCE —', '', ''],
-  ['Low tackle (safe, but arms stay free)', 'K', 'A'],
-  ['Arm-grip "ball and all" (no offload, risky)', 'L — keep held to hold down', 'B'],
-  ['Dive tackle', 'I', 'Y'],
-  ['Strip (one-on-one) / jump for a high ball', 'J', 'X'],
-  ['Switch player (nearest / next)', 'Q / E', 'LB / RB (or LT)'],
-  ['— SET PIECES —', '', ''],
-  ['Conversion: move the ball back, then set', 'W / S, then K', 'Left stick ↕, then A'],
-  ['Aim (line up the seam) / trajectory', 'A D / W S', 'Left stick'],
-  ['Power — release before the red zone', 'hold K', 'hold A'],
-  ['Short kick-off', 'hold L', 'hold B'],
-  ['Penalty: goal / touch / tap', 'K / L / J', 'A / B / X'],
-  ['— GENERAL —', '', ''],
-  ['Camera (behind / broadcast / high)', 'C', 'View'],
-  ['Pause', 'Esc / P', 'Start'],
+  ['Move', 'W A S D', 'Left stick', 'Joystick (left half)'],
+  ['Sprint', 'Shift', 'RT', 'Push the joystick to the edge'],
+  ['— ATTACK —', '', '', ''],
+  ['Pass left / right to the next man', 'Q / E', 'LB / RB', 'Tap ◀ PASS / PASS ▶'],
+  ['Pick the 1st / 2nd / 3rd man (cut-out)', 'hold Q or E + K / L / I', 'hold LB or RB + A / B / Y', 'Hold PASS for a cut-out'],
+  ['Flat pass (runner hits it at pace, riskier)', 'double-tap', 'double-tap', 'Double-tap PASS'],
+  ['Sidestep', '← / →', 'Flick right stick ← →', 'Swipe ← → (right half)'],
+  ['Fend (hold to keep the arm out)', '↓', 'Right stick ↓', 'Swipe ↓ and hold'],
+  ['Shoulder charge / bust a tackle', '↑', 'Right stick ↑', 'Swipe ↑'],
+  ['Dummy pass', 'I', 'Y', 'DUMMY'],
+  ['Quick kick: punt / grubber / chip / field goal', 'K / L / J / U', 'A / B / X / R3', 'PUNT / GRUBBER / CHIP / FIELD GOAL'],
+  ['Aimed kick: hold, steer, release', 'hold Space + K L J I U', 'hold LT + A B X Y R3', 'Tap AIM, then hold a kick button'],
+  ['   …aimed kick types', 'punt · grubber · chip · bomb · field goal', '', ''],
+  ['Kicking foot (left / right)', 'V', 'D-pad ↑', 'FOOT'],
+  ['In a tackle: offload / fight / leg drive', 'Q,E / arrows / mash Shift or K', 'LB,RB / R-stick / mash RT or A', 'OFFLOAD / swipe / mash DRIVE'],
+  ['Ground the ball in-goal', 'K', 'A', 'GROUND'],
+  ['— DEFENCE —', '', '', ''],
+  ['Low tackle (safe, but arms stay free)', 'K', 'A', 'TACKLE'],
+  ['Arm-grip "ball and all" (no offload, risky)', 'L — keep held to hold down', 'B', 'GRIP'],
+  ['Dive tackle', 'I', 'Y', 'DIVE'],
+  ['Strip (one-on-one) / jump for a high ball', 'J', 'X', 'STRIP / JUMP'],
+  ['Switch player (nearest / next)', 'Q / E', 'LB / RB (or LT)', '◀ SWITCH / SWITCH ▶'],
+  ['— SET PIECES —', '', '', ''],
+  ['Conversion: move the ball back, then set', 'W / S, then K', 'Left stick ↕, then A', 'Joystick ↕, then SET'],
+  ['Aim (line up the seam) / trajectory', 'A D / W S', 'Left stick', 'Joystick'],
+  ['Power — release before the red zone', 'hold K', 'hold A', 'Hold KICK'],
+  ['Short kick-off', 'hold L', 'hold B', 'Hold SHORT'],
+  ['Penalty: goal / touch / tap', 'K / L / J', 'A / B / X', 'Tap your choice'],
+  ['— GENERAL —', '', '', ''],
+  ['Camera (behind / broadcast / high)', 'C', 'View', 'CAM'],
+  ['Pause', 'Esc / P', 'Start', 'II'],
 ];
 
 const tier = (v) => (v >= 90 ? 'r90' : v >= 80 ? 'r80' : v >= 70 ? 'r70' : 'r60');
@@ -65,7 +65,8 @@ export function squadHTML(t) {
 }
 
 export function controlsHTML() {
-  return `<table class="ctrl">${CONTROLS.map((r) => r[1] === '' ? `<tr class="sec"><th colspan="3">${r[0]}</th></tr>` : `<tr><td>${r[0]}</td><td><kbd>${r[1]}</kbd></td><td><kbd>${r[2]}</kbd></td></tr>`).join('')}</table>`;
+  const cell = (v) => (v ? `<kbd>${v}</kbd>` : '');
+  return `<div class="ctrl-wrap"><table class="ctrl"><tr class="hdr"><th></th><th>Keyboard</th><th>Gamepad</th><th>Touch</th></tr>${CONTROLS.map((r) => r[1] === '' ? `<tr class="sec"><th colspan="4">${r[0]}</th></tr>` : `<tr><td>${r[0]}</td><td>${cell(r[1])}</td><td>${cell(r[2])}</td><td>${cell(r[3])}</td></tr>`).join('')}</table></div>`;
 }
 
 export class Menu {
@@ -111,8 +112,8 @@ export class Menu {
         <div class="rows">${this.rows.map((row, i) => `<div class="row ${i === this.sel ? 'sel' : ''}" data-i="${i}"><span class="lbl">${row.label}</span>
           <span class="val"><button data-i="${i}" data-d="-1">◀</button><span>${row.key === 'home' || row.key === 'away' ? this.swatch(TEAMS[c[row.key]]) : ''}${row.vals[c[row.key]]}${row.key === 'home' || row.key === 'away' ? ` <em class="ovr">${clubRatings(TEAMS[c[row.key]]).ovr}</em>` : ''}</span><button data-i="${i}" data-d="1">▶</button></span></div>`).join('')}</div>
         <div class="btns"><button class="go" data-a="start">KICK OFF ▶</button><button data-a="squads">Squads</button><button data-a="controls">Controls</button></div>
-        ${touchOnly() ? '<div class="touchnote">Footy 13 is played with a keyboard or a gamepad. Connect one to take control, or pick “Watch” to see a CPU match.</div>' : ''}
-        <div class="foot">Keyboard or gamepad · W/S choose · A/D change · Enter to start · H for controls</div></div>`;
+        ${touchOnly() ? '<div class="touchnote">Touch screen: turn your phone sideways. Joystick on the left, swipe and buttons on the right.</div>' : ''}
+        <div class="foot">Keyboard, gamepad or touch · W/S choose · A/D change · Enter to start · H for controls</div></div>`;
     }
     r.querySelectorAll('button[data-d]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); this.change(+b.dataset.i, +b.dataset.d); }));
     r.querySelectorAll('.row').forEach((row) => row.addEventListener('click', () => { this.sel = +row.dataset.i; this.render(); }));

@@ -25,7 +25,7 @@ const PADMAP = {
 };
 // right stick (axes 2/3) acts as four flick "buttons"
 const STICK = { rsLeft: [2, -1], rsRight: [2, 1], rsUp: [3, -1], rsDown: [3, 1] };
-const ACTIONS = [...new Set([...Object.keys(KEYMAP), ...Object.keys(PADMAP), ...Object.keys(STICK), 'back'])];
+const ACTIONS = [...new Set([...Object.keys(KEYMAP), ...Object.keys(PADMAP), ...Object.keys(STICK), 'back', 'cutL', 'cutR'])];
 
 export class Input {
   constructor() {
@@ -33,7 +33,9 @@ export class Input {
     this.tapped = new Set();
     this.state = {}; this.prev = {}; this.holdT = {}; this.lastHold = {};
     this.move = { x: 0, y: 0 };
-    this.usingPad = false;
+    this.usingPad = false; this.usingTouch = false;
+    // on-screen touch controls write here: held buttons, one-poll taps, and a virtual left stick
+    this.virt = {}; this.virtTap = new Set(); this.virtStick = { x: 0, y: 0, active: false };
     this.enabled = true;
     for (const a of ACTIONS) { this.state[a] = false; this.prev[a] = false; this.holdT[a] = 0; this.lastHold[a] = 0; }
     this._pressed = {}; this._released = {}; this._dbl = {}; this.lastPress = {}; this.clock = 0;
@@ -42,7 +44,7 @@ export class Input {
       if (gameCodes.has(e.code) && !(e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName))) e.preventDefault();
       if (!e.repeat) this.tapped.add(e.code);
       this.keys.add(e.code);
-      this.usingPad = false;
+      this.usingPad = false; this.usingTouch = false;
     });
     window.addEventListener('keyup', (e) => { this.keys.delete(e.code); });
     window.addEventListener('blur', () => { this.keys.clear(); });
@@ -74,6 +76,7 @@ export class Input {
       }
       if (pad.buttons.some((b) => b.pressed)) this.usingPad = true;
     }
+    if (this.virtStick.active) { mx = this.virtStick.x; my = this.virtStick.y; }
     const len = Math.hypot(mx, my);
     if (len > 1) { mx /= len; my /= len; }
     this.move.x = mx; this.move.y = my;
@@ -81,8 +84,8 @@ export class Input {
     this.clock += dt;
     for (const a of ACTIONS) {
       this.prev[a] = this.state[a];
-      const tappedNow = KEYMAP[a] && KEYMAP[a].some((c) => this.tapped.has(c));
-      const held = !!(kHeld(a) || padBtn(a));
+      const tappedNow = (KEYMAP[a] && KEYMAP[a].some((c) => this.tapped.has(c))) || this.virtTap.has(a);
+      const held = !!(kHeld(a) || padBtn(a) || this.virt[a]);
       this.state[a] = held;
       this._pressed[a] = (held && !this.prev[a]) || (tappedNow && !this.prev[a]);
       this._released[a] = (!held && this.prev[a]) || (tappedNow && !held);
@@ -92,7 +95,7 @@ export class Input {
       if (this._released[a]) { this.lastHold[a] = this.holdT[a]; this.holdT[a] = 0; }
       if (!held && !this._released[a]) this.holdT[a] = 0;
     }
-    this.tapped.clear();
+    this.tapped.clear(); this.virtTap.clear();
     if (!this.enabled) { for (const a of ACTIONS) { this._pressed[a] = false; } this.move.x = this.move.y = 0; }
   }
   held(a) { return this.enabled && !!this.state[a]; }

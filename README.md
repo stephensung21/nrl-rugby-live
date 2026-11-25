@@ -9,7 +9,14 @@ All teams, players, sponsors and branding are fictional.
 - **Quickest:** open `dist/standalone.html` in any modern browser. It's a single self-contained file.
 - Or open `index.html` (it loads `dist/game.js`), or serve the folder: `npm run dev` → http://localhost:8080
 
-Keyboard and gamepad (Xbox/PlayStation standard mapping) are both supported. Press **H** in a match for the controls screen.
+Keyboard, gamepad (Xbox/PlayStation standard mapping) and touch screens are all supported. Press **H** in a match for the controls screen.
+
+**On a phone or tablet**, turn it sideways:
+- **Left half:** a joystick that appears where your thumb lands. Push it to the edge to sprint.
+- **Right half:** swipe left or right to sidestep, up for a shoulder charge, and down to fend (keep your finger down to hold the fend).
+- **Pass buttons:** tap to pass to the next man, double-tap for a flat pass, and hold for a cut-out.
+- **Face buttons:** their labels change with the situation, such as punt and grubber on attack, tackle and grip on defence, or set and kick at a conversion. To aim a kick, tap **AIM** then hold a kick button.
+- **Top right:** pause, camera and full screen. The game shows a "turn sideways" prompt in portrait.
 
 ## Controls
 
@@ -86,6 +93,7 @@ npm run build    # dist/game.js + dist/standalone.html
 npm test         # headless CPU-v-CPU matches; fails on runtime errors or matches that don't finish
 node scripts/human-test.mjs      # drives the real keyboard controls through a match
 node scripts/setpiece-test.mjs   # human kick-off, conversion, penalty options, drop-out, scrum
+node scripts/touch-test.mjs      # on-screen touch controls on an emulated phone
 ```
 
 The game is plain ES modules in `src/`, bundled with esbuild into one IIFE, so `index.html` also works from `file://`.
@@ -103,7 +111,7 @@ The game is plain ES modules in `src/`, bundled with esbuild into one IIFE, so `
 | `model.js` | Skinned low-poly footballers, one draw call each |
 | `stadium.js` | Pitch, stands, crowd, sky |
 | `camera.js` | Cameras |
-| `hud.js`, `menu.js` | UI |
+| `hud.js`, `menu.js`, `touch.js` | UI and on-screen touch controls |
 | `audio.js` | Synthesised whistle, crowd and impacts |
 
 URL options for testing: `?autoplay` (CPU v CPU), `&seed=N`, `&half=N` (minutes per half), `&speed=N`, `&time=night`.

@@ -152,7 +152,7 @@ export class HUD {
     this.kick.innerHTML = `<div class="wind"><div class="arrow" style="transform:rotate(${(wAng * 180) / Math.PI}deg)">➤</div><div><b>${kmh} km/h</b><small>WIND</small></div></div>
       ${m.humanTeam && atk ? `<div class="krow"><small>QUICK</small><div class="ktypes">${kt(B.A, '-', 'Punt')}${kt(B.B, '-', 'Grubber')}${kt(B.X, '-', 'Chip')}${kt(B.U, '-', 'Field goal')}</div></div>
       <div class="krow"><small>HOLD ${B.M} +</small><div class="ktypes">${kt(B.A, 'punt', 'Punt')}${kt(B.B, 'grubber', 'Grubber')}${kt(B.X, 'chip', 'Chip')}${kt(B.Y, 'bomb', 'Bomb')}${kt(B.U, 'fieldgoal', 'FG')}</div></div>` : ''}
-      ${m.humanTeam ? `<div class="foot">FOOT: <b>${foot === 'L' ? 'LEFT' : 'RIGHT'}</b> <small>(${pad ? 'D-pad ↑' : 'V'})</small></div>` : ''}`;
+      ${m.humanTeam && !m.input.usingTouch ? `<div class="foot">FOOT: <b>${foot === 'L' ? 'LEFT' : 'RIGHT'}</b> <small>(${pad ? 'D-pad ↑' : 'V'})</small></div>` : ''}`;
     // meter
     let meterOn = false, val = 0, label = '', tick = -1;
     if (m.kickAim) { meterOn = true; val = m.kickAim.power; label = KICKS[m.kickAim.type].label + (m.kickAim.over > 0 ? ' — OVERCOOKED!' : ''); }
@@ -172,33 +172,34 @@ export class HUD {
   }
 
   hintText(m, pad) {
-    const k = (kb, gp) => `<kbd>${pad ? gp : kb}</kbd>`;
+    const touch = m.input.usingTouch;
+    const k = (kb, gp, tc) => `<kbd>${touch ? (tc ?? gp) : pad ? gp : kb}</kbd>`;
     const T = m.humanTeam; if (!T) return '';
     const pd = m.pd;
     if (m.phase === 'goalKick' && pd.team === T) {
-      if (pd.stage === 'place') return `${k('W/S', 'L-stick ↕')} move the ball back / forward (${pd.dist.toFixed(0)}m out) · ${k('K', 'A')} set the ball · ${k('V', 'D-pad ↑')} foot`;
-      if (pd.stage === 'aim') return `${k('A/D', 'L-stick ↔')} line up the seam · ${k('W/S', 'L-stick ↕')} trajectory · hold ${k('K', 'A')} for power · mind the wind`;
+      if (pd.stage === 'place') return `${k('W/S', 'L-stick ↕', 'stick ↕')} move the ball back / forward (${pd.dist.toFixed(0)}m out) · ${k('K', 'A', 'SET')} set the ball · ${k('V', 'D-pad ↑', 'FOOT')} foot`;
+      if (pd.stage === 'aim') return `${k('A/D', 'L-stick ↔', 'stick ↔')} line up the seam · ${k('W/S', 'L-stick ↕', 'stick ↕')} trajectory · hold ${k('K', 'A', 'KICK')} for power · mind the wind`;
       if (pd.stage === 'power') return 'Release before the red zone — the meter swings back!';
     }
     if ((m.phase === 'kickoff' || m.phase === 'touchKick') && pd.team === T && pd.stage === 'aim') {
-      return `${k('A/D', 'L-stick ↔')} aim · hold ${k('K', 'A')} for power${m.phase === 'kickoff' && pd.type !== 'dropout' ? ` · hold ${k('L', 'B')} instead for a short kick-off` : ''}`;
+      return `${k('A/D', 'L-stick ↔', 'stick ↔')} aim · hold ${k('K', 'A', 'LONG')} for power${m.phase === 'kickoff' && pd.type !== 'dropout' ? ` · hold ${k('L', 'B', 'SHORT')} instead for a short kick-off` : ''}`;
     }
-    if (m.phase === 'ptb' && pd.team === T) return `Play-the-ball… ${k('Q/E', 'LB/RB')} pass from dummy half (+ ${k('K/L/I', 'A/B/Y')} to pick the runner), or run it`;
+    if (m.phase === 'ptb' && pd.team === T) return (touch ? `Play-the-ball… tap ${k('', '', 'PASS')} now and it goes as soon as the ball is out` : `Play-the-ball… ${k('Q/E', 'LB/RB')} pass from dummy half (+ ${k('K/L/I', 'A/B/Y')} to pick the runner), or run it`);
     if (m.phase !== 'play') return '';
     const b = m.ball, c = m.controlled;
-    if (m.kickAim) return `${k('A/D', 'L-stick ↔')} aim · release ${k(KEYNAME[m.kickAim.btn], PADNAME[m.kickAim.btn])} to kick · ${k('Q/E', 'LB/RB')} cancel`;
+    if (m.kickAim) return `${k('A/D', 'L-stick ↔', 'stick ↔')} aim · release ${k(KEYNAME[m.kickAim.btn], PADNAME[m.kickAim.btn], 'RELEASE')} to kick · ${k('Q/E', 'LB/RB', 'PASS')} cancel`;
     if (b.carrier && b.carrier === c) {
-      if (c.state === 'tackled') return `In the tackle: ${k('Q/E', 'LB/RB')} offload · ${k('Arrows', 'R-stick')} fight free · mash ${k('Shift', 'RT')} leg drive`;
-      if (c.p.x * T.dir > FIELD.half) return `${k('K', 'A')} ground the ball — run toward the posts for an easier conversion!`;
-      if (c.p.x * T.dir < -FIELD.half) return `In your in-goal: ${k('K', 'A')} touch down, or run it out`;
+      if (c.state === 'tackled') return `In the tackle: ${k('Q/E', 'LB/RB', 'OFFLOAD')} offload · ${k('Arrows', 'R-stick', 'swipe')} fight free · mash ${k('Shift', 'RT', 'DRIVE')} leg drive`;
+      if (c.p.x * T.dir > FIELD.half) return `${k('K', 'A', 'GROUND')} ground the ball — run toward the posts for an easier conversion!`;
+      if (c.p.x * T.dir < -FIELD.half) return `In your in-goal: ${k('K', 'A', 'TOUCH DOWN')} touch down, or run it out`;
       if (m.input.held('passL') || m.input.held('passR')) return `${k('K', 'A')} 1st man · ${k('L', 'B')} 2nd · ${k('I', 'Y')} 3rd (cut-out) · double-tap for a flat ball`;
-      return `${k('Q/E', 'LB/RB')} pass (double-tap = flat) · ${k('←/→', 'R-stick ↔')} step · ${k('↓', 'R-stick ↓')} fend (hold) · ${k('↑', 'R-stick ↑')} shoulder · ${k('I', 'Y')} dummy`;
+      return (touch ? `${k('', '', 'PASS')} tap · double-tap flat · hold cut-out · swipe ${k('', '', '←→')} step ${k('', '', '↑')} shoulder ${k('', '', '↓')} fend · ${k('', '', 'AIM')} then a kick button to aim` : `${k('Q/E', 'LB/RB')} pass (double-tap = flat) · ${k('←/→', 'R-stick ↔')} step · ${k('↓', 'R-stick ↓')} fend (hold) · ${k('↑', 'R-stick ↑')} shoulder · ${k('I', 'Y')} dummy`);
     }
     if (b.carrier && b.carrier.team !== T) {
-      if (c && c.state === 'tackling') return `${k('J', 'X')} strip (one-on-one only) · keep ${k('L', 'B')} held to hold him down (risky)`;
-      return `${k('K', 'A')} low tackle · ${k('L', 'B')} arm-grip · ${k('I', 'Y')} dive · ${k('Q/E', 'LB/RB')} switch player`;
+      if (c && c.state === 'tackling') return `${k('J', 'X', 'STRIP')} strip (one-on-one only) · keep ${k('L', 'B', 'GRIP')} held to hold him down (risky)`;
+      return `${k('K', 'A', 'TACKLE')} low tackle · ${k('L', 'B', 'GRIP')} arm-grip · ${k('I', 'Y', 'DIVE')} dive · ${k('Q/E', 'LB/RB', 'SWITCH')} switch player`;
     }
-    return `Chase it down! ${k('J', 'X')} jump for the high ball · ${k('Q/E', 'LB/RB')} switch player`;
+    return `Chase it down! ${k('J', 'X', 'JUMP')} jump for the high ball · ${k('Q/E', 'LB/RB', 'SWITCH')} switch player`;
   }
 
   drawMini(m) {
@@ -233,7 +234,7 @@ export class HUD {
       const list = passCandidates(m, c, s).slice(0, held ? 3 : 1);
       list.forEach((cand, n) => {
         const t = this.tags[i++];
-        t.textContent = held ? names[n] : s < 0 ? (pad ? 'LB' : 'Q') : (pad ? 'RB' : 'E');
+        t.textContent = held ? names[n] : m.input.usingTouch ? (s < 0 ? '◀' : '▶') : s < 0 ? (pad ? 'LB' : 'Q') : (pad ? 'RB' : 'E');
         this.project(t, cand.q, camera);
       });
     }

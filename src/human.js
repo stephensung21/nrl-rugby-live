@@ -15,8 +15,9 @@ const H = FIELD.half;
 const QUICK = { faceA: 'punt', faceB: 'grubber', faceX: 'chip', fieldGoal: 'fieldgoal' };
 const AIMED = { faceA: 'punt', faceB: 'grubber', faceX: 'chip', faceY: 'bomb', fieldGoal: 'fieldgoal' };
 const RECEIVER = { faceA: 0, faceB: 1, faceY: 2 };
-// per-bumper pass state: used = a face button already chose the receiver
-const passSt = { passL: { used: false, pending: null }, passR: { used: false, pending: null } };
+// per-bumper pass state: used = a face button already chose the receiver; tapWait = first tap of a
+// possible double-tap (a second press inside the window throws the flat ball instead)
+const passSt = { passL: { used: false, pending: null, tapWait: 0 }, passR: { used: false, pending: null, tapWait: 0 } };
 
 export function updateHuman(m, dt) {
   const T = m.humanTeam, inp = m.input;
@@ -114,7 +115,7 @@ function carrier(m, p, mv, dt) {
     if (inp.pressed('passL')) A.offload(m, p, -1);
     else if (inp.pressed('passR')) A.offload(m, p, 1);
     if (inp.pressed('rsUp') || inp.pressed('rsDown') || inp.pressed('rsLeft') || inp.pressed('rsRight')) tryBreak(m, p);
-    if (inp.pressed('sprint') && p.engage) p.engage.legDrive = Math.min(1.6, p.engage.legDrive + 0.35);
+    if ((inp.pressed('sprint') || inp.pressed('faceA')) && p.engage) p.engage.legDrive = Math.min(1.6, p.engage.legDrive + 0.35);
     return;
   }
   if (m.kickAim) return kickAim(m, p, dt);
@@ -122,7 +123,10 @@ function carrier(m, p, mv, dt) {
   // ---- passing: bumper picks the side; tap = next man, bumper + face button = choose the man, double-tap = flat
   for (const btn of ['passL', 'passR']) {
     const side = btn === 'passL' ? -1 : 1, st = passSt[btn];
-    if (inp.pressed(btn)) { st.used = false; st.pending = null; }
+    if (inp.pressed(btn)) {
+      if (st.tapWait > 0) { st.tapWait = 0; st.used = true; firePass(m, p, side, 0, true); if (m.ball.carrier !== p) return; continue; }
+      st.used = false; st.pending = null;
+    }
     if (inp.held(btn)) {
       for (const f in RECEIVER) {
         if (!inp.pressed(f)) continue;
@@ -135,9 +139,16 @@ function carrier(m, p, mv, dt) {
       st.pending.t -= dt;
       if (st.pending.t <= 0) { firePass(m, p, side, RECEIVER[st.pending.face], false); st.pending = null; }
     }
-    if (inp.released(btn) && !st.used) firePass(m, p, side, 0, inp.doubleTapped(btn));
+    if (inp.released(btn) && !st.used) { st.used = true; st.tapWait = 0.2; }
+    if (st.tapWait > 0 && !inp.held(btn)) {
+      st.tapWait -= dt;
+      if (st.tapWait <= 0) { st.tapWait = 0; firePass(m, p, side, 0, false); }
+    }
     if (m.ball.carrier !== p) return;
   }
+  // touch: hold the pass button for a cut-out to the second man
+  if (inp.pressed('cutL')) { firePass(m, p, -1, 1, false); if (m.ball.carrier !== p) return; }
+  if (inp.pressed('cutR')) { firePass(m, p, 1, 1, false); if (m.ball.carrier !== p) return; }
   const passHeld = inp.held('passL') || inp.held('passR');
   // ---- right stick: evasion
   if (!inGoal) {
