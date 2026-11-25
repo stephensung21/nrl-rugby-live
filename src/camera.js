@@ -19,6 +19,9 @@ export class CameraRig {
     return { x: r.x * ix + f.x * iy, z: r.z * ix + f.z * iy };
   }
   update(dt, m) {
+    if (this.override) { // debug / test hook: fixed camera
+      const o = this.override; this.cam.position.set(o.pos[0], o.pos[1], o.pos[2]); this.cam.lookAt(o.tgt[0], o.tgt[1], o.tgt[2]); return;
+    }
     const b = m.ball, ph = m.phase, pd = m.pd;
     const du = m.humanTeam ? m.humanTeam.dir : (m.attackTeam()?.dir ?? 1);
     let snap = false;

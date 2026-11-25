@@ -53,22 +53,25 @@ export function buildStadium(scene, renderer, opts) {
 
   // --- markings -------------------------------------------------------------
   const lineMat = new THREE.MeshBasicMaterial({ color: 0xf4f4f0 });
-  const lineGeos = [];
+  const lineGeos = [], redGeos = [];
   const tmpObj = new THREE.Object3D();
-  const line = (x1, z1, x2, z2, w = 0.12) => {
+  const line = (x1, z1, x2, z2, w = 0.12, out = lineGeos) => {
     const len = Math.hypot(x2 - x1, z2 - z1);
     const g = new THREE.PlaneGeometry(len, w);
     tmpObj.rotation.set(-Math.PI / 2, 0, -Math.atan2(z2 - z1, x2 - x1));
     tmpObj.position.set((x1 + x2) / 2, 0.012, (z1 + z2) / 2); tmpObj.updateMatrix();
-    g.applyMatrix4(tmpObj.matrix); lineGeos.push(g);
+    g.applyMatrix4(tmpObj.matrix); out.push(g);
   };
   const H = FIELD.half, W = FIELD.halfW, D = FIELD.dead;
   line(-D, -W, D, -W, 0.14); line(-D, W, D, W, 0.14);
   line(-D, -W, -D, W, 0.14); line(D, -W, D, W, 0.14);
-  for (let x = -50; x <= 50; x += 10) line(x, -W, x, W, x === 0 || Math.abs(x) === 50 ? 0.16 : 0.1);
+  // 20 m and 40 m lines (|x| = 30 and 10) are painted red, as on an NRL field
+  const isRed = (x) => Math.abs(x) === 30 || Math.abs(x) === 10;
+  for (let x = -50; x <= 50; x += 10) line(x, -W, x, W, x === 0 || Math.abs(x) === 50 ? 0.16 : isRed(x) ? 0.14 : 0.1, isRed(x) ? redGeos : lineGeos);
   // dashed 10 m and 20 m in from touch, plus 5 m dashes
   for (let x = -45; x <= 45; x += 5) for (const zz of [-W + 10, W - 10, -W + 20, W - 20]) line(x - 0.5, zz, x + 0.5, zz, 0.1);
   scene.add(new THREE.Mesh(mergeGeometries(lineGeos), lineMat));
+  scene.add(new THREE.Mesh(mergeGeometries(redGeos), new THREE.MeshBasicMaterial({ color: 0xd8262c })));
   // in-goal tint
   for (const s of [-1, 1]) {
     const ig = tex(1024, 128, (g, w, h) => {

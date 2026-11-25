@@ -15,13 +15,13 @@ export class Player {
     this.heading = 0;
     this.wish = { x: 0, z: 0 }; this.wantSprint = false; this.faceTarget = null; this.speedCap = 1;
     this.state = 'free'; this.stateT = 0; this.stateDur = 0;
-    this.anim = { t: 0, side: 1, fall: 0, faceUp: false, kt: 0, foot: 'R', preKick: false, roll: 0, dur: 0.5 };
+    this.anim = { t: 0, side: 1, fall: 0, faceUp: false, kt: 0, foot: 'R', preKick: false, roll: 0, dur: 0.5, pile: 0 };
     this.stamina = 1;
     this.cd = { step: 0, fend: 0, bump: 0, tackle: 0, dummy: 0 };
     this.speedMul = 1;
     this.offside = false;
     this.passAnim = 0; this.passSide = 1; this.catchAnim = 0; this.catchHigh = false; this.refSignal = 0;
-    this.hasBall = false; this.carrySide = 1;
+    this.hasBall = false; this.carrySide = 1; this.pendingPass = null;
     this.lateralLean = 0; this.accelLean = 0; this.readyStance = false; this.legDriveVis = 0; this.jumpY = 0;
     this.jumpT = 0; this.fendHold = 0;
     this.speedH = 0;
@@ -42,10 +42,11 @@ export class Player {
   isUpright() { return !['ground', 'getup', 'lunge', 'dive', 'tackling', 'tackled', 'scrum'].includes(this.state); }
 
   setState(s, dur = 0) {
-    this.state = s; this.stateT = 0; this.stateDur = dur; this.anim.t = 0;
+    this.state = s; this.stateT = 0; this.stateDur = dur; this.anim.t = 0; this.anim.quick = false;
   }
-  knockDown(dur, faceUp = false) {
-    this.setState('ground', dur); this.anim.fall = 1; this.anim.faceUp = faceUp; this.lunge = null;
+  knockDown(dur, faceUp = false, o = {}) {
+    // fall eases in from wherever the body already is (o.fall), so a completed tackle doesn't snap flat
+    this.setState('ground', dur); this.anim.fall = o.fall ?? 0.35; this.anim.faceUp = faceUp; this.anim.pile = o.pile || 0; this.lunge = null; this.pendingPass = null;
   }
 
   update(dt) {
@@ -62,7 +63,7 @@ export class Player {
     // timed state transitions
     const s = this.state;
     if (this.stateDur > 0 && this.stateT >= this.stateDur) {
-      if (s === 'ground') { this.setState('getup', 0.45); this.anim.dur = 0.45; }
+      if (s === 'ground') { this.setState('getup', 0.6); this.anim.dur = 0.6; }
       else if (s === 'getup' || s === 'step' || s === 'fend' || s === 'bump' || s === 'stumble' || s === 'kick') this.setState('free');
     }
     if (s === 'ground') this.anim.fall = Math.min(1, this.anim.fall + dt * 4);

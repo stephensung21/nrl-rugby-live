@@ -40,6 +40,17 @@ export function updateHuman(m, dt) {
     if (inp.pressed('passR') || inp.pressed('kickMod')) switchNearest(m, inp.pressed('kickMod') ? 0 : 1);
     return;
   }
+  if (m.dhHold && p.team !== m.dhHold.team) {
+    // waiting for the dummy half: hold the line (no creeping offside, no tackling yet)
+    if (MOBILE_STATES.has(p.state)) {
+      p.wish.x = mv.x; p.wish.z = mv.z; p.wantSprint = inp.held('sprint'); p.faceTarget = headingOf(-p.team.opp.dir, 0);
+      const D = p.team, lim = m.dhHold.markers.includes(p) ? m.dhHold.mark.x * D.dir - 0.9 : m.dhHold.onsideAx - 0.3;
+      if (p.p.x * D.dir > lim && p.wish.x * D.dir > 0) p.wish.x = 0;
+    }
+    if (inp.pressed('passL')) switchNearest(m, 0);
+    if (inp.pressed('passR') || inp.pressed('kickMod')) switchNearest(m, inp.pressed('kickMod') ? 0 : 1);
+    return;
+  }
   if (MOBILE_STATES.has(p.state) && p.state !== 'kick') {
     p.wish.x = mv.x; p.wish.z = mv.z; p.wantSprint = inp.held('sprint'); p.faceTarget = null;
   }
@@ -111,6 +122,7 @@ function sideFromInput(m, p, mv) {
 
 function carrier(m, p, mv, dt) {
   const inp = m.input, T = p.team;
+  if (p.pendingPass) return; // ball is on its way out of the hands
   if (p.state === 'tackled') {
     if (inp.pressed('passL')) A.offload(m, p, -1);
     else if (inp.pressed('passR')) A.offload(m, p, 1);

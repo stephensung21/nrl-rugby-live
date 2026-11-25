@@ -1,6 +1,6 @@
 // Match engine: phases, rules (six-tackle sets, play-the-ball, restarts, scoring) and the main tick.
 import * as THREE from 'three';
-import { FIELD, KICKS, DIFFICULTY, WIND_PRESETS } from './config.js';
+import { FIELD, KICKS, DIFFICULTY, WIND_PRESETS, GAME_SPEED } from './config.js';
 import { Player } from './player.js';
 import { PlayerModel, makeKitMaterials } from './model.js';
 import { Ball } from './ball.js';
@@ -62,7 +62,7 @@ export class Match {
     this.updateWind(0);
 
     this.time = 0; this.clock = 0; this.half = 1; this.siren = false;
-    this.clockRate = 2400 / (Math.max(1, o.settings.halfLen) * 60);
+    this.clockRate = 2400 / (Math.max(1, o.settings.halfLen) * 60 * (o.settings.gameSpeed || GAME_SPEED));
     this.phase = 'none'; this.phaseT = 0; this.pd = {};
     this.poss = this.teams[0]; this.tackleCount = 0;
     this.engagements = [];
@@ -117,6 +117,7 @@ export class Match {
   }
   setPhase(ph, data = {}) {
     this.phase = ph; this.phaseT = 0; this.pd = data;
+    if (ph !== 'play') this.dhHold = null;
     this.emit('phase', { phase: ph });
   }
   setControlled(p) {
@@ -148,8 +149,8 @@ export class Match {
     p.offside = false; p.kickOffside = false; p.wish.x = p.wish.z = 0; p.ai.hold = { x, z }; p.ai.role = 'hold'; p.faceTarget = heading;
   }
   resetAll() {
-    this.engagements.length = 0;
-    for (const p of this.players) { p.lunge = null; p.engage = null; p.offside = false; p.kickOffside = false; p.speedMul = 1; p.ai.hold = null; p.ai.plan = null; p.readyStance = false; }
+    this.engagements.length = 0; this.dhHold = null;
+    for (const p of this.players) { p.lunge = null; p.engage = null; p.pendingPass = null; p.anim.pile = 0; p.offside = false; p.kickOffside = false; p.speedMul = 1; p.ai.hold = null; p.ai.plan = null; p.readyStance = false; }
     this.kickAim = null; this.kickTarget = null; this.tee.visible = false;
   }
 
@@ -294,6 +295,16 @@ export class Match {
     else if (b.state === 'ground' || b.state === 'air') { /* dead-ish ball keeps moving visually */ }
   }
 
+  // Ends the play-the-ball standoff once the dummy half has done something with the ball.
+  updateDummyHalfHold() {
+    const h = this.dhHold;
+    if (!h) return;
+    const b = this.ball, dh = h.player;
+    const used = this.phase !== 'play' || b.state !== 'held' || b.carrier !== dh || dh.state !== 'free' || dh.pendingPass
+      || dist2D(dh.p.x, dh.p.z, h.x, h.z) > 1.0;
+    if (used) { this.dhHold = null; this.playStartT = this.time; }
+  }
+
   rulesLive(dt) {
     const b = this.ball;
     if (b.state === 'held' && b.carrier) A.carrierBounds(this, b.carrier, dt);
@@ -305,7 +316,7 @@ export class Match {
       const behind = p.p.x * D.dir <= (this.onsideAx ?? -99) + 0.4;
       const c = b.carrier;
       const passed = c && c.team !== D && (c.p.x - p.p.x) * c.team.dir > 0.5;
-      if (behind || passed || this.time - (this.playStartT ?? 0) > 3.0) p.offside = false;
+      if (behind || passed || (!this.dhHold && this.time - (this.playStartT ?? 0) > 3.0)) p.offside = false;
     }
     // line breaks + metres
     const c = b.carrier;
@@ -407,6 +418,14 @@ export class Match {
       pp.p.set(mk.x, 0, mk.z); pp.heading = headingOf(d, 0); pp.anim.roll = 0;
       this.ball.p.set(mk.x + d * 0.25, 0.25, mk.z);
     }
+    // tacklers still on the deck roll away from the play-the-ball
+    for (const p of this.players) {
+      if (p === pp || (p.state !== 'ground' && p.state !== 'getup')) continue;
+      const dx = p.p.x - mk.x, dz = p.p.z - mk.z, dd = Math.hypot(dx, dz);
+      if (dd > 1.3) continue;
+      const nx = dd > 0.05 ? dx / dd : 0, nz = dd > 0.05 ? dz / dd : 1;
+      p.p.x += nx * 1.8 * dt; p.p.z += (nz + (Math.abs(nz) < 0.3 ? Math.sign(p.p.z - mk.z || 1) * 0.6 : 0)) * 1.8 * dt;
+    }
     const dhSpot = { x: mk.x - d * 1.3, z: mk.z };
     const dhReady = dist2D(dh.p.x, dh.p.z, dhSpot.x, dhSpot.z) < 1.6;
     if (pd.stage === 'up' && this.phaseT >= pd.playAt - 0.3 && (dhReady || this.phaseT > pd.playAt + 1.5)) pd.stage = 'roll';
@@ -420,6 +439,8 @@ export class Match {
         this.ball.give(dh);
         pp.setState('free'); pp.anim.roll = 0;
         this.playStartT = this.time;
+        // the defence holds its line until the dummy half passes, kicks or runs (see updateDummyHalfHold)
+        this.dhHold = { team: T, player: dh, x: dh.p.x, z: dh.p.z, mark: { ...mk }, markers: pd.markers, onsideAx: pd.onsideAx };
         this.setPhase('play', {});
         dh.ai.plan = pd.plan; dh.ai.passDelay = randRange(0.12, 0.35); dh.ai.dummyHalf = true; dh.ai.passCd = 0;
         if (T.human) this.setControlled(dh);
@@ -470,7 +491,7 @@ export class Match {
       const hb = F.get(7);
       const bx = pd.x - d * 2.9;
       hb.p.set(bx - d * 0.4, 0, pd.z); hb.heading = headingOf(d, 0);
-      for (const p of this.players) if (p.state === 'scrum') { p.setState('getup', 0.35); p.anim.dur = 0.35; p.anim.faceUp = false; }
+      for (const p of this.players) if (p.state === 'scrum') { p.setState('getup', 0.35); p.anim.dur = 0.35; p.anim.faceUp = false; p.anim.quick = true; }
       this.ball.give(hb);
       hb.ai.plan = { kind: 'shift' }; hb.ai.passDelay = randRange(0.2, 0.5); hb.ai.dummyHalf = true;
       this.gainLineX = pd.x; this.lineBreakDone = false; this.playStartT = this.time;
@@ -681,10 +702,12 @@ export class Match {
     if (this.over && this.phase === 'fulltime') { for (const p of this.players) { p.wish.x = p.wish.z = 0; p.update(dt); } return; }
     this.time += dt; this.phaseT += dt;
     this.updateWind(dt);
+    this.updateDummyHalfHold();
     updateHuman(this, dt);
     updateAI(this, dt);
     const fn = this['phase_' + this.phase];
     if (fn) fn.call(this, dt);
+    A.updatePendingPasses(this, dt);
     for (const p of this.players) {
       if (p.state === 'kick') p.anim.kt = p.stateT;
       p.hasBall = this.ball.state === 'held' && this.ball.carrier === p;
@@ -700,13 +723,13 @@ export class Match {
 
   // Render-side sync (called once per rendered frame)
   syncVisuals(dt, time) {
-    for (const p of this.players) p.model.update(p, dt, time);
-    this.ref.model.update(this.ref, dt, time);
+    for (const p of this.players) p.model.update(p, dt, time, this.ball.p);
+    this.ref.model.update(this.ref, dt, time, this.ball.p);
     const b = this.ball;
     let anchor = null, h = 0;
     if (b.state === 'held' && b.carrier) {
       b.carrier.model.root.updateMatrixWorld(true);
-      anchor = new THREE.Vector3(); b.carrier.model.ballAnchor.getWorldPosition(anchor); h = b.carrier.heading;
+      anchor = b.carrier.model.ballWorld(new THREE.Vector3()); h = b.carrier.heading + (b.carrier.model.twoHand > 0.5 ? Math.PI / 2 : 0);
     }
     b.syncMesh(anchor, h);
     const c = this.controlled;

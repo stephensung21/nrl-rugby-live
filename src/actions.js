@@ -27,7 +27,27 @@ export function pickReceiver(m, p, side, long) {
   return c[0].q;
 }
 
+// Passes start with a short wind-up (ball swung across to the hip) and leave the hands on release.
+// Offloads and passes from a tackle go straight away.
+const PASS_WINDUP = 0.1;
 export function passBall(m, p, q, o = {}) {
+  if (!q || m.ball.carrier !== p || p.pendingPass) return false;
+  if (o.offload || o.instant || p.state === 'tackled') return releasePass(m, p, q, o);
+  const lat = (q.p.x - p.p.x) * p.right.x + (q.p.z - p.p.z) * p.right.z;
+  p.pendingPass = { q, o, t: PASS_WINDUP, dur: PASS_WINDUP, side: lat > 0 ? -1 : 1 };
+  q.ai.dummyHalf = false; q.ai.plan = null;
+  return true;
+}
+export function updatePendingPasses(m, dt) {
+  for (const p of m.players) {
+    const pp = p.pendingPass;
+    if (!pp) continue;
+    pp.t -= dt;
+    if (m.ball.carrier !== p || m.ball.state !== 'held' || p.state === 'ground' || p.state === 'getup') { p.pendingPass = null; continue; }
+    if (pp.t <= 0) { p.pendingPass = null; if (pp.q.isUpright()) releasePass(m, p, pp.q, { ...pp.o, afterWindup: true }); }
+  }
+}
+function releasePass(m, p, q, o = {}) {
   const b = m.ball;
   if (!q || b.carrier !== p) return false;
   const T = p.team, f = p.fwd;
@@ -60,10 +80,11 @@ export function passBall(m, p, q, o = {}) {
   b.v.set((tx - sx) / t, (ty - sy) / t + 0.5 * GRAVITY * t, (tz - sz) / t);
   b.drag = 0; b.curve = 0; b.spin = 'spiral'; b.grubber = false;
   b.lastTouch = p; b.setIgnore(p, m.time + 0.35);
-  p.passAnim = 0.3;
+  p.passAnim = 0.35;
   const lat = (q.p.x - p.p.x) * p.right.x + (q.p.z - p.p.z) * p.right.z;
   p.passSide = lat > 0 ? -1 : 1;
-  q.ai.passCd = (q.isForward || q.num === 2 || q.num === 5 ? 0.7 : 0.45) + rand() * 0.4; q.ai.dummyHalf = false; q.ai.plan = null;
+  q.ai.passCd = (q.isForward || q.num === 2 || q.num === 5 ? 0.7 : 0.45) + rand() * 0.4;
+  if (!o.afterWindup) { q.ai.dummyHalf = false; q.ai.plan = null; }
   m.kickTarget = { x: tx, z: tz, t: m.time + t, pass: true };
   m.audio.catchBall();
   m.emit('pass', { team: T, player: p, to: q, offload: !!o.offload, kind: o.flat ? 'flat' : 'standard' });

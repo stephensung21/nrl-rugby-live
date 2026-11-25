@@ -2,7 +2,7 @@
 
 A 13-a-side rugby league game that runs in the browser. It uses chunky low-poly characters in an early-2000s open-world style and a full match rules engine. Physics and controls are the focus: passing, running lines, fends, sidesteps, shoulder charges, wrap tackles, and kicking with wind, kicking foot and hold-for-power meters.
 
-All teams, players, sponsors and branding are fictional.
+Clubs, sponsors and branding are fictional. Player names are deliberate near-misses of the real players each squad is rated from.
 
 ## Play it
 
@@ -64,13 +64,13 @@ Press **H** in a match for this list.
 - **Squads:** 17 fictional clubs with fixed 13-man squads.
   - **Ratings come from real 2026 NRL performance.** Each club's 13 are rated from one real club's most-used starters in jerseys 1–13. The stats are per-80-minute rates: line breaks, tackle breaks, run and post-contact metres, tackling efficiency, try and line-break assists, kick metres and goal-kicking rate, errors, offloads, kicks defused and minutes. Each player is compared with every other first-grader in his position.
   - **Heights, weights and ages come from the players' public nrl.com profiles** (age as at 25 Nov 2026). Players whose profile can't be found keep invented values typical for their position.
-  - **Identities are invented:** names and looks are fictional, club names and colours are original, and no player name or surname matches a real player.
+  - **Names are near-misses of the real players:** same first name, surname changed by one small spelling tweak (e.g. Nathan Cleary → Nathan Clearie), so it's clear who each player is meant to be. No surname exactly matches a real player's. Looks are invented, and club names and colours are original. `node scripts/gen-squads.mjs --names-only` re-applies the names without touching ratings or physicals.
   - Every player has nine ratings, an overall rating weighted by position, and a kicking foot. Height sets how big he looks; weight is his mass in collisions, shoulder charges and big-on-small tackles.
   - **Squads** on the main menu, or in the pause menu during a match, shows every sheet.
   - `src/squads.js` is plain data and can be hand-edited. `node scripts/gen-squads.mjs [player_match_stats.csv]` regenerates it from the nrl-predictor dataset. It defaults to `../stephensung21/nrl-predictor/data/processed/player_match_stats.csv`.
   - Add `--fetch-profiles` to fetch heights, weights and dates of birth from nrl.com, at one request a second. Results are cached in `data/physicals.json`, which is gitignored. Add `--retry-missing` to look again for players who weren't found, including under other clubs. Behind a proxy, run it with `NODE_USE_ENV_PROXY=1`.
-- **Match:** 13 v 13 single match, selectable half length, difficulty, wind, kick-off time (day / twilight / night under floodlights), camera and golden point.
-- **Rules:** six-tackle sets, play-the-ball with markers and the 10m defensive line (offside defenders can't tackle), handovers, "six again" ruck calls, knock-ons, forward passes (judged relative to the passer's momentum), scrums, tries, conversions, penalty goals, field goals, kicking for touch, tap restarts, 40/20 and 20/40, goal-line drop-outs, 20m restarts, held up in-goal, reaching out to score, being bundled into touch, kick-off 10m and out-on-the-full rules, the siren (play continues until the ball is dead), half time and golden point.
+- **Match:** 13 v 13 single match, selectable game speed (75% by default, so play is easier to read), half length, difficulty, wind, kick-off time (day / twilight / night under floodlights), camera and golden point.
+- **Rules:** six-tackle sets, play-the-ball with markers and the 10m defensive line (the defence holds until the dummy half passes, runs or kicks; offside defenders can't tackle), red 20m and 40m lines, handovers, "six again" ruck calls, knock-ons, forward passes (judged relative to the passer's momentum), scrums, tries, conversions, penalty goals, field goals, kicking for touch, tap restarts, 40/20 and 20/40, goal-line drop-outs, 20m restarts, held up in-goal, reaching out to score, being bundled into touch, kick-off 10m and out-on-the-full rules, the siren (play continues until the ball is dead), half time and golden point.
 - **Ball physics:** quadratic drag, wind (stronger higher up), kicking-foot curve (a right-footer hooks it left), weak-foot penalty, overcooked-power error, unpredictable oval bounces, end-over-end grubbers, charge-downs, and the ball hitting the posts and crossbar. Goal kicks have no trajectory guide: you line up the seam and judge the wind yourself.
 - **Player physics:** momentum-based acceleration and turning (you can't cut at full pace), stamina, collisions.
 - **Contact:**
@@ -94,6 +94,7 @@ npm test         # headless CPU-v-CPU matches; fails on runtime errors or matche
 node scripts/human-test.mjs      # drives the real keyboard controls through a match
 node scripts/setpiece-test.mjs   # human kick-off, conversion, penalty options, drop-out, scrum
 node scripts/touch-test.mjs      # on-screen touch controls on an emulated phone
+SHOTS=out node scripts/pose-shots.mjs  # close-up screenshots of tackles, passes, falls etc. for checking animation
 ```
 
 The game is plain ES modules in `src/`, bundled with esbuild into one IIFE, so `index.html` also works from `file://`.
@@ -108,7 +109,7 @@ The game is plain ES modules in `src/`, bundled with esbuild into one IIFE, so `
 | `human.js` | Player controls and switching |
 | `physics.js` | Ball flight, usable without the DOM |
 | `player.js` | Locomotion |
-| `model.js` | Skinned low-poly footballers, one draw call each |
+| `model.js` | Skinned low-poly footballers (varied hair, beards, tattoos, tape, boots), procedural animation; one draw call each |
 | `stadium.js` | Pitch, stands, crowd, sky |
 | `camera.js` | Cameras |
 | `hud.js`, `menu.js`, `touch.js` | UI and on-screen touch controls |

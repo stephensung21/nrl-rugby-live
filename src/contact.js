@@ -1,6 +1,6 @@
 // Tackling: lunges, evasion contests (step / fend / shoulder), wrap-up engagements, gang tackles, collisions.
 import { FIELD } from './config.js';
-import { clamp, rand, randRange, chance, gauss, dist2D, headingOf, damp } from './util.js';
+import { clamp, rand, randRange, chance, gauss, dist2D, headingOf, damp, dampAngle, wrapAngle } from './util.js';
 import * as A from './actions.js';
 
 const H = FIELD.half, W = FIELD.halfW;
@@ -8,11 +8,13 @@ const H = FIELD.half, W = FIELD.halfW;
 // can jar the ball loose, risks high tackles); dive = desperation; hit = AI shoulder-led hit; auto = ran into him.
 const REACH = { normal: 2.0, low: 1.9, grip: 1.8, hit: 1.8, dive: 3.4, auto: 1.0 };
 const LUNGE_T = { normal: 0.22, low: 0.22, grip: 0.24, hit: 0.26, dive: 0.42, auto: 0.12 };
+// distance between carrier and tackler centres while locked in a tackle (bodies touch, don't overlap)
+const ENGAGE_R = 0.64;
 const CONTACT_R = { normal: 0.85, low: 0.85, grip: 0.8, hit: 0.8, dive: 1.0, auto: 0.95 };
 
 export function attemptTackle(m, d, kind, o = {}) {
   const b = m.ball, c = b.carrier;
-  if (m.phase !== 'play' || !c || b.state !== 'held' || c.team === d.team) return false;
+  if (m.phase !== 'play' || m.dhHold || !c || b.state !== 'held' || c.team === d.team) return false;
   if (d.state !== 'free' || d.cd.tackle > 0 || d.lunge) return false;
   if (c.state === 'ground' || c.state === 'getup') return false;
   const dist = dist2D(d.p.x, d.p.z, c.p.x, c.p.z);
@@ -140,9 +142,16 @@ export function startEngagement(m, c, d, dom, kind) {
   const e = { carrier: c, tacklers: [d], progress: 0, dom, t: 0, legDrive: 0, kind, inGoalChecked: false, heldUp: false, offloadTried: false, breakTried: false };
   m.engagements.push(e);
   c.setState('tackled'); c.engage = e; c.anim.fall = 0; c.lunge = null;
-  d.setState('tackling'); d.engage = e;
+  d.setState('tackling'); d.engage = e; d.anim.fall = 0;
   const ox = d.p.x - c.p.x, oz = d.p.z - c.p.z, ol = Math.hypot(ox, oz) || 1;
-  d.engageOff = { x: (ox / ol) * 0.55, z: (oz / ol) * 0.55 };
+  d.engageOff = { x: (ox / ol) * ENGAGE_R, z: (oz / ol) * ENGAGE_R };
+  // How the carrier goes down: a dominant hit from the front drives him onto his back; otherwise he is
+  // twisted and falls forward / sideways. He turns to that heading as the tackle goes in.
+  const toT = headingOf(ox, oz), rel = wrapAngle(toT - c.heading);
+  if (Math.abs(rel) < Math.PI / 2) { // tackler in front
+    e.faceUp = dom > 0.15;
+    e.fallHeading = e.faceUp ? toT : toT + (rel >= 0 ? -1.3 : 1.3);
+  } else { e.faceUp = false; e.fallHeading = toT + Math.PI; }
   const keep = dom > 0.4 ? 0.2 : 0.55; c.v.x *= keep; c.v.z *= keep;
   m.audio.thud(0.6 + Math.max(0, dom) * 0.7);
   if (dom > 0.5) m.camRig.shake(0.2);
@@ -154,9 +163,14 @@ export function startEngagement(m, c, d, dom, kind) {
 
 function joinEngagement(m, e, d) {
   if (e.tacklers.includes(d) || e.tacklers.length >= 3) return;
-  e.tacklers.push(d); d.setState('tackling'); d.engage = e; d.lunge = null;
-  const ang = e.tacklers.length * 2.1;
-  d.engageOff = { x: Math.cos(ang) * 0.55, z: Math.sin(ang) * 0.55 };
+  e.tacklers.push(d); d.setState('tackling'); d.engage = e; d.lunge = null; d.anim.fall = 0;
+  // come in from the side he's actually on, but not on top of a team-mate already in the tackle
+  let ang = Math.atan2(d.p.z - e.carrier.p.z, d.p.x - e.carrier.p.x);
+  for (let k = 0; k < 4; k++) {
+    const clash = e.tacklers.some((t) => t !== d && t.engageOff && Math.abs(wrapAngle(Math.atan2(t.engageOff.z, t.engageOff.x) - ang)) < 1.2);
+    if (!clash) break; ang += 1.3;
+  }
+  d.engageOff = { x: Math.cos(ang) * ENGAGE_R, z: Math.sin(ang) * ENGAGE_R };
   e.dom = clamp(e.dom + 0.14, -1, 1); e.progress += 0.08;
   m.audio.thud(0.4);
 }
@@ -207,7 +221,11 @@ function endEngagement(m, e, knockAll) {
   const i = m.engagements.indexOf(e);
   if (i >= 0) m.engagements.splice(i, 1);
   e.carrier.engage = null;
-  e.tacklers.forEach((t, k) => { t.engage = null; if (knockAll) t.knockDown(0.45 + rand() * 0.6 + k * 0.3); else if (t.state === 'tackling') t.setState('stumble', 0.4); });
+  e.tacklers.forEach((t, k) => {
+    t.engage = null;
+    if (knockAll) t.knockDown(0.45 + rand() * 0.6 + k * 0.3, false, { fall: Math.max(0.35, t.anim.fall || 0), pile: 0.16 });
+    else if (t.state === 'tackling') t.setState('stumble', 0.4);
+  });
 }
 
 function updateEngagement(m, e, dt) {
@@ -226,8 +244,17 @@ function updateEngagement(m, e, dt) {
   c.p.x += c.v.x * dt; c.p.z += c.v.z * dt;
   c.legDriveVis = clamp(0.3 + e.legDrive * 0.6 + Math.max(0, drive) / 4, 0, 1);
   c.speedH = Math.hypot(c.v.x, c.v.z);
-  c.anim.fall = Math.min(1, e.progress);
-  for (const d of e.tacklers) { d.p.x = c.p.x + d.engageOff.x; d.p.z = c.p.z + d.engageOff.z; d.v.copy(c.v); d.heading = headingOf(-d.engageOff.x, -d.engageOff.z); }
+  c.anim.fall = Math.min(1, e.progress); c.anim.faceUp = e.faceUp;
+  c.heading = dampAngle(c.heading, e.fallHeading, 5, dt);
+  // tacklers stay locked on; once he starts to go down they go with him and land across his legs
+  const down = clamp((e.progress - 0.3) / 0.7, 0, 1), reach = ENGAGE_R + down * 0.3;
+  for (const d of e.tacklers) {
+    const ol = Math.hypot(d.engageOff.x, d.engageOff.z) || 1;
+    const tx = c.p.x + (d.engageOff.x / ol) * reach, tz = c.p.z + (d.engageOff.z / ol) * reach;
+    d.p.x = damp(d.p.x, tx, 14, dt); d.p.z = damp(d.p.z, tz, 14, dt);
+    d.v.copy(c.v); d.heading = dampAngle(d.heading, headingOf(c.p.x - d.p.x, c.p.z - d.p.z), 12, dt);
+    d.anim.fall = down;
+  }
   // holding the arm-grip on = holding down: slows the play-the-ball, but the referee may penalise it
   if (e.gripBy && e.gripBy.controlled && m.input.held('faceB')) e.holdDown = (e.holdDown || 0) + dt;
   // AI defenders pile in
@@ -237,7 +264,7 @@ function updateEngagement(m, e, dt) {
       if (dist2D(d.p.x, d.p.z, c.p.x, c.p.z) < 2.0 && chance(dt * 4)) { joinEngagement(m, e, d); break; }
     }
   }
-  if (!hasBall) { if (e.progress >= 1) endEngagement(m, e, true), c.knockDown(1.0); return; }
+  if (!hasBall) { if (e.progress >= 1) endEngagement(m, e, true), c.knockDown(1.0, !!e.faceUp, { fall: 1 }); return; }
   const ax = c.p.x * T.dir;
   if (Math.abs(c.p.z) > W) { endEngagement(m, e, true); return m.scrumRestart(T.opp, c.p.x, c.p.z, 'INTO TOUCH', `Bundled out — scrum ${T.opp.short} feed`); }
   if (ax > H && !e.inGoalChecked) {
@@ -264,7 +291,7 @@ function completeTackle(m, e) {
     if (!e.penalty && chance(0.32)) e.penalty = 'Holding down';
   }
   endEngagement(m, e, true);
-  c.knockDown(99, e.dom > 0.35);
+  c.knockDown(99, !!e.faceUp, { fall: 1 });
   const d = e.tacklers[0];
   d.stats.tackles++; d.team.stats.tackles++;
   for (let i = 1; i < e.tacklers.length; i++) e.tacklers[i].stats.tackles++;
@@ -278,9 +305,39 @@ export function updateContact(m, dt) {
 }
 
 const SKIP = new Set(['ground', 'scrum', 'tackled', 'tackling', 'ptb', 'goalkick']);
+// Players locked in a tackle or lying on the turf don't get shoved about, but nobody runs through them:
+// upright players are pushed around them. A body on the ground is a capsule along its length.
+const BODY_R = 0.36;
+function pushOffStatic(a, s) {
+  let cx = s.p.x, cz = s.p.z, r = BODY_R;
+  if (s.state === 'ground' || s.state === 'getup') {
+    const fx = Math.sin(s.heading), fz = Math.cos(s.heading);
+    const t = clamp((a.p.x - s.p.x) * fx + (a.p.z - s.p.z) * fz, -0.75, 0.85);
+    cx += fx * t; cz += fz * t; r = 0.3;
+  }
+  const dx = a.p.x - cx, dz = a.p.z - cz, minD = r + BODY_R;
+  if (Math.abs(dx) > minD || Math.abs(dz) > minD) return;
+  const d = Math.hypot(dx, dz);
+  if (d >= minD) return;
+  const nx = d > 1e-4 ? dx / d : 1, nz = d > 1e-4 ? dz / d : 0;
+  a.p.x += nx * (minD - d); a.p.z += nz * (minD - d);
+  const vn = a.v.x * nx + a.v.z * nz;
+  if (vn < 0) { a.v.x -= nx * vn; a.v.z -= nz * vn; }
+}
 export function resolveCollisions(m) {
   const ps = m.players, n = ps.length;
   const carrier = m.ball.state === 'held' ? m.ball.carrier : null;
+  const live = m.phase === 'play' || m.phase === 'ptb';
+  if (live) {
+    for (const s of ps) {
+      if (!SKIP.has(s.state) || s.state === 'goalkick') continue;
+      for (const a of ps) {
+        if (a === s || SKIP.has(a.state) || a.lunge) continue;
+        if (Math.abs(a.p.x - s.p.x) > 2 || Math.abs(a.p.z - s.p.z) > 2) continue;
+        pushOffStatic(a, s);
+      }
+    }
+  }
   for (let i = 0; i < n; i++) {
     const a = ps[i]; if (SKIP.has(a.state)) continue;
     for (let j = i + 1; j < n; j++) {
@@ -294,7 +351,7 @@ export function resolveCollisions(m) {
       a.p.x -= nx * push * wa; a.p.z -= nz * push * wa; b.p.x += nx * push * wb; b.p.z += nz * push * wb;
       const rel = (b.v.x - a.v.x) * nx + (b.v.z - a.v.z) * nz;
       if (rel < 0) { a.v.x += nx * rel * wa * 0.8; a.v.z += nz * rel * wa * 0.8; b.v.x -= nx * rel * wb * 0.8; b.v.z -= nz * rel * wb * 0.8; }
-      if (carrier && m.phase === 'play' && (a === carrier || b === carrier)) {
+      if (carrier && m.phase === 'play' && !m.dhHold && (a === carrier || b === carrier)) {
         const def = a === carrier ? b : a;
         if (def.team !== carrier.team && def.state === 'free' && !def.offside && def.cd.tackle <= 0 && !def.lunge && carrier.state !== 'tackled') {
           def.cd.tackle = 0.7; resolveContact(m, def, carrier, 'auto');

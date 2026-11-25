@@ -59,7 +59,7 @@ function ptbPositions(m) {
   const plan = pd.plan;
   for (const p of T.players) {
     if (p === pd.ptbPlayer || !mobile(p)) continue;
-    if (p === pd.dummy) { goTo(p, mk.x - d * 1.3, mk.z, { sprint: true, arrive: 1.2, stop: 0.2 }); faceDir(p, d); continue; }
+    if (p === pd.dummy) { const dd = goTo(p, mk.x - d * 1.3, mk.z, { sprint: true, arrive: 1.2, stop: 0.2 }); faceDir(p, d); if (dd < 0.8) p.readyStance = true; continue; }
     if (p.controlled) continue;
     let s = A.attackSlotFor(m, T, p, mk.x, mk.z);
     if (plan && plan.target === p) {
@@ -85,6 +85,25 @@ function ptbPositions(m) {
     line.push(p);
   }
   assignLine(m, D, line, T.players.filter((a) => a !== pd.ptbPlayer), () => lineX, mk.z, false);
+}
+
+// Play-the-ball standoff: the markers stand square and the line waits on the 10 m line until the
+// dummy half passes, kicks or runs.
+function holdDefence(m, D, c) {
+  const h = m.dhHold, mk = h.mark, d = D.opp.dir, lineAx = h.onsideAx, late = m.tackleCount >= 4;
+  const line = [];
+  for (const p of D.players) {
+    if (!mobile(p) || p.controlled) continue;
+    if (h.markers.includes(p)) {
+      const k = h.markers.indexOf(p);
+      goTo(p, mk.x + d * 1.1, mk.z + (k === 0 ? 0 : 0.6), { speed: 0.6, stop: 0.25 }); faceDir(p, -d); p.readyStance = true; continue;
+    }
+    if (p.offside) { goTo(p, (lineAx - 1.5) * D.dir, p.p.z, { sprint: true }); continue; }
+    if (p.num === 1) { const ax = Math.max(-H - 3, lineAx - (late ? 26 : 16)); goTo(p, ax * D.dir, mk.z * 0.4, {}); faceDir(p, -d); continue; }
+    if (late && (p.num === 2 || p.num === 5)) { const ax = Math.max(-H - 2, lineAx - 20); goTo(p, ax * D.dir, (p.p.z > 0 ? 1 : -1) * 22, {}); faceDir(p, -d); continue; }
+    line.push(p);
+  }
+  assignLine(m, D, line, D.opp.players.filter((a) => a !== c), () => lineAx * D.dir, c.p.z, false);
 }
 
 // Defensive line: match line defenders to attackers laterally with sensible spacing.
@@ -114,7 +133,8 @@ function livePlay(m, dt) {
   if (b.state === 'held' && b.carrier) {
     const c = b.carrier;
     attackLive(m, c.team, c, null, dt);
-    defendLive(m, c.team.opp, c, false, dt);
+    if (m.dhHold) holdDefence(m, c.team.opp, c);
+    else defendLive(m, c.team.opp, c, false, dt);
   } else if (b.kind === 'pass' && b.state === 'air' && b.info) {
     const info = b.info;
     attackLive(m, info.team, null, info.target, dt);
@@ -184,7 +204,7 @@ function aiCarrier(m, c, dt) {
     if (e && !e.breakTried && e.progress < 0.3 && c.isForward && chance(dt * 0.8)) tryBreak(m, c);
     return;
   }
-  if (!c.canAct()) return;
+  if (!c.canAct() || c.pendingPass) return;
   const ax = c.p.x * d;
   if (ax > H) { goTo(c, d * (H + 3), 0, { sprint: true }); return; }
   if (ax < -H && c.ai.inGoalCatch) { goTo(c, -d * (H - 2), c.p.z, { sprint: true }); }

@@ -73,12 +73,13 @@ export class Menu {
   constructor(root, onStart) {
     this.onStart = onStart;
     this.root = el('div', 'menu', root);
-    this.cfg = { home: 0, away: 5, side: 0, halfLen: 1, difficulty: 1, wind: 1, time: 0, camera: 0, goldenPoint: 0 };
+    this.cfg = { home: 0, away: 5, side: 0, halfLen: 1, difficulty: 1, wind: 1, time: 0, camera: 0, goldenPoint: 0, gameSpeed: 0 };
     this.rows = [
       { key: 'home', label: 'Home team', vals: TEAMS.map((t) => t.name) },
       { key: 'away', label: 'Away team', vals: TEAMS.map((t) => t.name) },
       { key: 'side', label: 'You play as', vals: ['Home', 'Away', 'Watch (CPU v CPU)'] },
       { key: 'halfLen', label: 'Half length', vals: ['3 min', '5 min', '8 min', '10 min', '20 min'], nums: [3, 5, 8, 10, 20] },
+      { key: 'gameSpeed', label: 'Game speed', vals: ['Steady (75%)', 'Brisk (90%)', 'Full (100%)'], nums: [0.75, 0.9, 1.0] },
       { key: 'difficulty', label: 'Difficulty', vals: ['Easy', 'Normal', 'Hard'], ids: ['easy', 'normal', 'hard'] },
       { key: 'wind', label: 'Wind', vals: ['Calm', 'Breezy', 'Gusty'], ids: ['calm', 'breezy', 'gusty'] },
       { key: 'time', label: 'Kick-off time', vals: ['Afternoon', 'Twilight', 'Night (floodlights)'], ids: ['day', 'dusk', 'night'] },
@@ -93,7 +94,8 @@ export class Menu {
     return {
       homeDef: TEAMS[c.home], awayDef: TEAMS[c.away], humanIdx: c.side === 2 ? -1 : c.side,
       settings: { halfLen: R('halfLen').nums[c.halfLen], difficulty: R('difficulty').ids[c.difficulty], wind: R('wind').ids[c.wind],
-        time: R('time').ids[c.time], camera: R('camera').ids[c.camera], goldenPoint: c.goldenPoint === 0 },
+        time: R('time').ids[c.time], camera: R('camera').ids[c.camera], goldenPoint: c.goldenPoint === 0,
+        gameSpeed: R('gameSpeed').nums[c.gameSpeed] },
     };
   }
   swatch(t) { return swatchOf(t); }

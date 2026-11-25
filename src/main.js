@@ -1,6 +1,6 @@
 // Entry point: renderer, fixed-step simulation loop, menus and the attract-mode demo match.
 import * as THREE from 'three';
-import { DT } from './config.js';
+import { DT, GAME_SPEED } from './config.js';
 import { setSeed, rand } from './util.js';
 import { Input } from './input.js';
 import { AudioFX } from './audio.js';
@@ -25,6 +25,7 @@ const input = new Input(), audio = new AudioFX(), camRig = new CameraRig(camera)
 const hud = new HUD(app);
 let scene = null, stadium = null, match = null, mode = 'menu', paused = false, acc = 0, lastCfg = null, screenKey = '';
 let speed = +(params.get('speed') || 1);
+let pace = GAME_SPEED; // the match's own pace setting; `speed` is the test/debug multiplier on top
 
 function newMatch(cfg, demo = false) {
   hud.closeModal();
@@ -39,6 +40,7 @@ function newMatch(cfg, demo = false) {
   hud.attach(match);
   match.showResults = !demo;
   match.start();
+  pace = s.gameSpeed || GAME_SPEED;
   acc = 0; screenKey = '';
   window.__game.match = match; window.__game.scene = scene;
 }
@@ -98,7 +100,7 @@ function frame(now) {
   const dt = Math.min(0.1, (now - last) / 1000); last = now; time += dt;
   if (match && mode === 'menu' && match.over && match.phaseT > 6 && !params.has('autoplay')) newMatch(demoConfig(), true);
   if (match && !paused) {
-    acc += dt * speed;
+    acc += dt * speed * pace;
     let steps = 0;
     const maxSteps = 10 * Math.max(1, speed);
     while (acc >= DT && steps < maxSteps) {
@@ -116,7 +118,8 @@ function frame(now) {
     if (mode === 'menu') menu.update(input);
   }
   if (match) {
-    match.syncVisuals(dt, time);
+    const simDt = paused ? 0 : dt * (speed || 1) * pace; // speed 0 = test harness stepping the sim itself
+    match.syncVisuals(simDt, time);
     camRig.update(dt, match);
     stadium.update(dt, time, match.wind, match.excite);
     audio.update(dt, mode === 'playing' ? match.excite : 0);

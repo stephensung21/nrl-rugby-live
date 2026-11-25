@@ -10,6 +10,8 @@ export const FIELD = {
 };
 
 export const DT = 1 / 60;
+// Default simulation pace (fraction of real time). Slower play reads more clearly with 26 players on screen.
+export const GAME_SPEED = 0.75;
 export const GRAVITY = 9.81;
 
 export const BALL = {
