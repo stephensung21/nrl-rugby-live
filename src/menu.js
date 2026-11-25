@@ -3,6 +3,8 @@ import { TEAMS } from './teams.js';
 
 const el = (tag, cls, parent, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html !== undefined) e.innerHTML = html; if (parent) parent.appendChild(e); return e; };
 
+const touchOnly = () => { try { return matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches; } catch { return false; } };
+
 export const CONTROLS = [
   ['Move', 'W A S D / Arrows', 'Left stick'],
   ['Sprint', 'Shift', 'RT'],
@@ -79,6 +81,7 @@ export class Menu {
         <div class="rows">${this.rows.map((row, i) => `<div class="row ${i === this.sel ? 'sel' : ''}" data-i="${i}"><span class="lbl">${row.label}</span>
           <span class="val"><button data-i="${i}" data-d="-1">◀</button><span>${row.key === 'home' || row.key === 'away' ? this.swatch(TEAMS[c[row.key]]) : ''}${row.vals[c[row.key]]}</span><button data-i="${i}" data-d="1">▶</button></span></div>`).join('')}</div>
         <div class="btns"><button class="go" data-a="start">KICK OFF ▶</button><button data-a="controls">Controls</button></div>
+        ${touchOnly() ? '<div class="touchnote">Footy 13 is played with a keyboard or a gamepad. Connect one to take control, or pick “Watch” to see a CPU match.</div>' : ''}
         <div class="foot">Keyboard or gamepad · ↑↓ choose · ←→ change · Enter to start</div></div>`;
     }
     r.querySelectorAll('button[data-d]').forEach((b) => b.addEventListener('click', (e) => { e.stopPropagation(); this.change(+b.dataset.i, +b.dataset.d); }));
